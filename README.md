@@ -11,8 +11,11 @@ There are two ways to get started:
 Use our pre-built Docker image with VNC desktop access. Works on any OS (Windows, macOS, Linux).
 
 ```bash
-# Pull and run the container
-docker run -p 6080:80 --shm-size=2g ghcr.io/armlabstanford/collaborative-robotics-2026:latest
+# Pull the image
+docker pull peasant98/tidybot2:humble
+
+# Run the container
+docker run -p 6080:80 --shm-size=2g peasant98/tidybot2:humble
 
 # Access via browser
 # Open http://127.0.0.1:6080/
