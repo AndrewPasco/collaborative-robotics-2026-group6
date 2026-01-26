@@ -45,7 +45,7 @@ def generate_launch_description():
     )
 
     # URDF from xacro
-    urdf_path = PathJoinSubstitution([pkg_description, 'urdf', 'tidybot_wx200.urdf.xacro'])
+    urdf_path = PathJoinSubstitution([pkg_description, 'urdf', 'tidybot_wx250s.urdf.xacro'])
     robot_description = Command(['xacro ', urdf_path])
 
     # ========== NODES ==========
@@ -70,7 +70,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'arm_name': 'right',
-            'robot_model': 'wx200',
+            'robot_model': 'wx250s',
             'publish_rate': 100.0,
         }]
     )
@@ -83,7 +83,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'arm_name': 'left',
-            'robot_model': 'wx200',
+            'robot_model': 'wx250s',
             'publish_rate': 100.0,
         }]
     )

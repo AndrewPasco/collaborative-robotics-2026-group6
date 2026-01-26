@@ -2,7 +2,7 @@
 """
 TidyBot2 Arm Control Demo
 
-Demonstrates how to control the bimanual WX200 arms using ROS2.
+Demonstrates how to control the bimanual WX250s arms using ROS2.
 The arms move from home position to a forward reaching position.
 
 Topics used:
@@ -10,7 +10,7 @@ Topics used:
 - /left_arm/cmd (ArmCommand) - left arm joint position commands
 
 ArmCommand message:
-- joint_positions: [waist, shoulder, elbow, wrist_angle, wrist_rotate]
+- joint_positions: [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 - duration: interpolation time (0 = immediate)
 
 Usage:
@@ -29,9 +29,9 @@ from tidybot_msgs.msg import ArmCommand
 from std_msgs.msg import Float64MultiArray
 
 
-# Joint positions: [waist, shoulder, elbow, wrist_angle, wrist_rotate]
-HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0]
-FORWARD_POSITION = [0.0, 0.4, 0.5, -0.3, 0.0]  # Reaching forward
+# Joint positions: [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
+HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+FORWARD_POSITION = [0.0, 0.4, 0.5, 0.0, -0.3, 0.0]  # Reaching forward
 
 MOVE_DURATION = 2.0  # seconds
 

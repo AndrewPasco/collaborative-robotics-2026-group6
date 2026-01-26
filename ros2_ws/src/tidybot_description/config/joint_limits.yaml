@@ -1,5 +1,5 @@
 # Joint limits configuration for TidyBot2
-# These limits match the MuJoCo model in tidybot_wx200_bimanual.xml
+# These limits match the MuJoCo model in tidybot_wx250s_bimanual.xml
 
 # Pan-tilt camera joints
 camera_pan:
@@ -10,18 +10,22 @@ camera_tilt:
   min: -1.5708  # -90 degrees
   max: 1.309    # +75 degrees
 
-# Right arm joints
+# Right arm joints (6-DOF WX250s)
 right_waist:
   min: -3.14159  # -180 degrees
   max: 3.14159   # +180 degrees
 
 right_shoulder:
   min: -1.8849   # -108 degrees
-  max: 1.9722    # +114 degrees
+  max: 1.9897    # +114 degrees
 
 right_elbow:
-  min: -1.8849   # -108 degrees
-  max: 1.6232    # +93 degrees
+  min: -2.1468   # -123 degrees
+  max: 1.6057    # +92 degrees
+
+right_forearm_roll:
+  min: -3.14159  # -180 degrees
+  max: 3.14159   # +180 degrees
 
 right_wrist_angle:
   min: -1.7453   # -100 degrees
@@ -32,25 +36,29 @@ right_wrist_rotate:
   max: 3.14159   # +180 degrees
 
 right_left_finger:
-  min: 0.0
-  max: 0.022     # 22mm
+  min: 0.015
+  max: 0.037     # 37mm
 
 right_right_finger:
-  min: 0.0
-  max: 0.022     # 22mm
+  min: 0.015
+  max: 0.037     # 37mm
 
-# Left arm joints (same as right)
+# Left arm joints (6-DOF WX250s, same as right)
 left_waist:
   min: -3.14159
   max: 3.14159
 
 left_shoulder:
   min: -1.8849
-  max: 1.9722
+  max: 1.9897
 
 left_elbow:
-  min: -1.8849
-  max: 1.6232
+  min: -2.1468
+  max: 1.6057
+
+left_forearm_roll:
+  min: -3.14159
+  max: 3.14159
 
 left_wrist_angle:
   min: -1.7453
@@ -61,9 +69,9 @@ left_wrist_rotate:
   max: 3.14159
 
 left_left_finger:
-  min: 0.0
-  max: 0.022
+  min: 0.015
+  max: 0.037
 
 left_right_finger:
-  min: 0.0
-  max: 0.022
+  min: 0.015
+  max: 0.037

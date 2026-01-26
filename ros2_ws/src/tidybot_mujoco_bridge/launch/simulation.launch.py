@@ -12,7 +12,7 @@ def generate_launch_description():
     # Adjust this path based on your workspace structure
     default_model_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-        '..', '..', 'simulation', 'assets', 'mujoco', 'scene_wx200_bimanual.xml'
+        '..', '..', 'simulation', 'assets', 'mujoco', 'scene_wx250s_bimanual.xml'
     )
     default_model_path = os.path.abspath(default_model_path)
 

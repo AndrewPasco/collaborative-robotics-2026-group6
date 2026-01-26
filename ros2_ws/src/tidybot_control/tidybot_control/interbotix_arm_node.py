@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interbotix WX200 Hardware Interface Node.
+Interbotix WX250s Hardware Interface Node.
 
 This node provides the SAME topic interface as the MuJoCo bridge,
 but sends commands to real hardware via the Interbotix SDK.
@@ -28,7 +28,7 @@ except ImportError:
 
 class InterbotixArmNode(Node):
     """
-    Real hardware interface for Interbotix WX200 arm.
+    Real hardware interface for Interbotix WX250s arm.
 
     Provides the SAME interface as MuJoCo bridge:
     - Subscribes to: /right_arm/joint_cmd, /left_arm/joint_cmd, etc.
@@ -38,7 +38,7 @@ class InterbotixArmNode(Node):
     """
 
     JOINT_NAMES = [
-        'waist', 'shoulder', 'elbow', 'wrist_angle', 'wrist_rotate'
+        'waist', 'shoulder', 'elbow', 'forearm_roll', 'wrist_angle', 'wrist_rotate'
     ]
 
     def __init__(self):
@@ -46,7 +46,7 @@ class InterbotixArmNode(Node):
 
         # Parameters
         self.declare_parameter('arm_name', 'right')
-        self.declare_parameter('robot_model', 'wx200')
+        self.declare_parameter('robot_model', 'wx250s')
         self.declare_parameter('publish_rate', 100.0)
 
         self.arm_name = self.get_parameter('arm_name').get_parameter_value().string_value
@@ -79,6 +79,7 @@ class InterbotixArmNode(Node):
         # Full joint names with arm prefix (matches simulation)
         self.full_joint_names = [f'{self.arm_name}_{j}' for j in self.JOINT_NAMES]
         self.full_joint_names += [f'{self.arm_name}_left_finger', f'{self.arm_name}_right_finger']
+        self.num_arm_joints = len(self.JOINT_NAMES)  # 6 for WX250s
 
         # Publishers - SAME as MuJoCo bridge
         self.joint_state_pub = self.create_publisher(JointState, '/joint_states', 10)
@@ -108,8 +109,8 @@ class InterbotixArmNode(Node):
 
         Same interface as MuJoCo bridge subscribes to.
         """
-        if len(msg.data) != 5:
-            self.get_logger().warn(f'Expected 5 joint values, got {len(msg.data)}')
+        if len(msg.data) != self.num_arm_joints:
+            self.get_logger().warn(f'Expected {self.num_arm_joints} joint values, got {len(msg.data)}')
             return
 
         try:
@@ -153,14 +154,14 @@ class InterbotixArmNode(Node):
             msg.header.frame_id = 'base_link'
 
             # Arm joints
-            for i, name in enumerate(self.full_joint_names[:5]):
+            for i, name in enumerate(self.full_joint_names[:self.num_arm_joints]):
                 msg.name.append(name)
                 msg.position.append(positions[i])
                 msg.velocity.append(velocities[i] if i < len(velocities) else 0.0)
                 msg.effort.append(0.0)
 
             # Gripper joints (simplified - both fingers same position)
-            finger_pos = gripper_pos * 0.022  # Normalize to meters
+            finger_pos = gripper_pos * 0.037  # Normalize to meters (WX250s finger range)
             msg.name.append(f'{self.arm_name}_left_finger')
             msg.position.append(finger_pos)
             msg.velocity.append(0.0)

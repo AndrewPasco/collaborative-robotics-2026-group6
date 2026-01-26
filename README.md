@@ -1,6 +1,6 @@
 # Collaborative Robotics 2026
 
-This repository contains software for controlling the **TidyBot2** mobile robot with bimanual **WX200** 5-DOF arms, developed for Professor Monroe Kennedy's 2026 Collaborative Robotics Class.
+This repository contains software for controlling the **TidyBot2** mobile robot with bimanual **WX250s** 6-DOF arms, developed for Professor Monroe Kennedy's 2026 Collaborative Robotics Class.
 
 ## Installation
 
@@ -131,12 +131,13 @@ collaborative-robotics-2026/
 
 **TidyBot2** is a mobile manipulation platform consisting of:
 - **Mobile Base**: Kobuki or Create3 base with 3 DOF (x, y, theta)
-- **Arms**: 2x WX200 5-DOF manipulators (550mm reach, 200g payload)
-  - Waist (base rotation): ±175°
+- **Arms**: 2x WX250s 6-DOF manipulators (650mm reach, 250g payload)
+  - Waist (base rotation): ±180°
   - Shoulder (lift): -108° to 114°
   - Elbow (bend): -123° to 92°
+  - Forearm roll: ±180°
   - Wrist angle: -100° to 123°
-  - Wrist rotate: ±175°
+  - Wrist rotate: ±180°
 - **Grippers**: 2x Robotiq 2F-85 adaptive parallel jaw (85mm max opening)
 - **Camera**: Pan-tilt RealSense D435 (RGB + Depth)
 
@@ -179,7 +180,7 @@ cd ros2_ws && colcon build
 - [uv Documentation](https://docs.astral.sh/uv/)
 - [TidyBot Paper](https://arxiv.org/abs/2305.05658)
 - [TidyBot2 Paper](https://arxiv.org/pdf/2412.10447)
-- [Interbotix WX200 Specs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx200.html)
+- [Interbotix WX250s Specs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx250s.html)
 
 ## Authors
 

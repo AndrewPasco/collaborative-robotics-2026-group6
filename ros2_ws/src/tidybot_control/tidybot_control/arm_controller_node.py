@@ -22,11 +22,12 @@ from tidybot_msgs.msg import ArmCommand, GripperCommand
 class ArmControllerNode(Node):
     """High-level arm controller with trajectory interpolation."""
 
-    # Joint limits (from tidybot_wx200_bimanual.xml)
+    # Joint limits (from tidybot_wx250s_bimanual.xml)
     JOINT_LIMITS = {
         'waist': (-3.14159, 3.14159),
-        'shoulder': (-1.8849, 1.9722),
-        'elbow': (-1.8849, 1.6232),
+        'shoulder': (-1.8849, 1.9897),
+        'elbow': (-2.1468, 1.6057),
+        'forearm_roll': (-3.14159, 3.14159),
         'wrist_angle': (-1.7453, 2.1468),
         'wrist_rotate': (-3.14159, 3.14159),
     }
@@ -41,19 +42,20 @@ class ArmControllerNode(Node):
         self.arm_name = self.get_parameter('arm_name').get_parameter_value().string_value
         self.control_rate = self.get_parameter('control_rate').get_parameter_value().double_value
 
-        # Joint names for this arm
+        # Joint names for this arm (6-DOF WX250s)
         self.joint_names = [
             f'{self.arm_name}_waist',
             f'{self.arm_name}_shoulder',
             f'{self.arm_name}_elbow',
+            f'{self.arm_name}_forearm_roll',
             f'{self.arm_name}_wrist_angle',
             f'{self.arm_name}_wrist_rotate',
         ]
 
         # State variables
-        self.current_positions = np.zeros(5)
-        self.target_positions = np.zeros(5)
-        self.start_positions = np.zeros(5)
+        self.current_positions = np.zeros(6)
+        self.target_positions = np.zeros(6)
+        self.start_positions = np.zeros(6)
         self.trajectory_duration = 0.0
         self.trajectory_time = 0.0
         self.in_trajectory = False
@@ -95,8 +97,8 @@ class ArmControllerNode(Node):
 
     def arm_cmd_callback(self, msg: ArmCommand):
         """Handle incoming arm commands."""
-        if len(msg.joint_positions) != 5:
-            self.get_logger().warn(f'ArmCommand has {len(msg.joint_positions)} positions, expected 5')
+        if len(msg.joint_positions) != 6:
+            self.get_logger().warn(f'ArmCommand has {len(msg.joint_positions)} positions, expected 6')
             return
 
         # Clamp to joint limits

@@ -9,11 +9,11 @@
 
 ## Project Overview
 
-**TidyBot2** - A mobile robot platform with bimanual WX200 5-DOF arms for Stanford's Collaborative Robotics class. This repository provides MuJoCo simulation and ROS2 control software.
+**TidyBot2** - A mobile robot platform with bimanual WX250s 6-DOF arms for Stanford's Collaborative Robotics class. This repository provides MuJoCo simulation and ROS2 control software.
 
 ### Robot Configuration
 - **Mobile Base:** 3 DOF (x, y, theta)
-- **Arms:** 2x WX200 (5 DOF each: waist, shoulder, elbow, wrist_angle, wrist_rotate)
+- **Arms:** 2x WX250s (6 DOF each: waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate)
 - **Grippers:** 2x Robotiq 2F-85
 - **Camera:** Pan-tilt RealSense D435 (RGB + Depth)
 
@@ -148,7 +148,7 @@ collaborative-robotics-2026/
 
 **ArmCommand.msg** - Joint space control:
 ```
-float64[5] joint_positions  # [waist, shoulder, elbow, wrist_angle, wrist_rotate]
+float64[6] joint_positions  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 float64 duration            # Movement time in seconds
 ```
 
@@ -158,15 +158,16 @@ float64 position  # 0.0 (open) to 1.0 (closed)
 float64 effort    # 0.0 (low) to 1.0 (high force)
 ```
 
-## WX200 Arm Joint Limits
+## WX250s Arm Joint Limits
 
 | Joint | Min (rad) | Max (rad) | Range (deg) |
 |-------|-----------|-----------|-------------|
-| Waist | -3.05 | 3.05 | 350° |
+| Waist | -3.14 | 3.14 | 360° |
 | Shoulder | -1.88 | 1.99 | 222° |
 | Elbow | -2.15 | 1.61 | 215° |
+| Forearm Roll | -3.14 | 3.14 | 360° |
 | Wrist Angle | -1.75 | 2.15 | 223° |
-| Wrist Rotate | -3.05 | 3.05 | 350° |
+| Wrist Rotate | -3.14 | 3.14 | 360° |
 
 ## Common Development Commands
 

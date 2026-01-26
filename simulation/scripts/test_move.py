@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-TidyBot2 with Bimanual WX200 Arms - MuJoCo Simulation Demo
+TidyBot2 with Bimanual WX250s Arms - MuJoCo Simulation Demo
 
 This script demonstrates how to:
-1. Load the TidyBot2 mobile robot with dual WX200 5-DOF arms in MuJoCo
+1. Load the TidyBot2 mobile robot with dual WX250s 6-DOF arms in MuJoCo
 2. Control the mobile base (x, y, rotation) with configurable speed
-3. Control both arm joints (left/right: waist, shoulder, elbow, wrist_angle, wrist_rotate)
+3. Control both arm joints (left/right: waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate)
 4. Control both grippers (open/close)
 5. Control the 2-DOF pan-tilt camera system
 6. Capture RGB and depth images from the simulated Intel RealSense D435
@@ -174,7 +174,7 @@ def main():
     # The scene XML file includes the robot, floor, and lighting
     # Get path relative to this script's location
     script_dir = Path(__file__).parent
-    model_path = script_dir / "../assets/mujoco/scene_wx200_bimanual.xml"
+    model_path = script_dir / "../assets/mujoco/scene_wx250s_bimanual.xml"
     model_path = model_path.resolve()  # Convert to absolute path
     model = mujoco.MjModel.from_xml_path(str(model_path))  # Static model definition
     data = mujoco.MjData(model)  # Dynamic simulation state (positions, velocities, etc.)
@@ -206,28 +206,30 @@ def main():
     base_ctrl_y = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "joint_y")      # Target y position (meters)
     base_ctrl_theta = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "joint_th") # Target rotation (radians)
 
-    # --- Right WX200 Arm Actuators (5 joints) ---
-    # The arm has 5 degrees of freedom, from base to end-effector:
+    # --- Right WX250s Arm Actuators (6 joints) ---
+    # The arm has 6 degrees of freedom, from base to end-effector:
     right_arm_ctrl_waist = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_waist")            # Rotates entire arm left/right
     right_arm_ctrl_shoulder = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_shoulder")      # Raises/lowers upper arm
     right_arm_ctrl_elbow = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_elbow")            # Bends the elbow
+    right_arm_ctrl_forearm_roll = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_forearm_roll")  # Rotates the forearm
     right_arm_ctrl_wrist_angle = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_wrist_angle")    # Bends wrist up/down
     right_arm_ctrl_wrist_rotate = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_wrist_rotate")  # Rotates wrist
 
     # --- Right Gripper Actuators (2 finger joints) ---
-    right_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_left_finger")  # Left finger (0 = open, 0.022 = closed)
-    right_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_right_finger")  # Right finger (0 = open, 0.022 = closed)
+    right_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_left_finger")  # Left finger (0.015 = open, 0.037 = closed)
+    right_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_right_finger")  # Right finger (0.015 = open, 0.037 = closed)
 
-    # --- Left WX200 Arm Actuators (5 joints) ---
+    # --- Left WX250s Arm Actuators (6 joints) ---
     left_arm_ctrl_waist = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_waist")
     left_arm_ctrl_shoulder = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_shoulder")
     left_arm_ctrl_elbow = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_elbow")
+    left_arm_ctrl_forearm_roll = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_forearm_roll")
     left_arm_ctrl_wrist_angle = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_wrist_angle")
     left_arm_ctrl_wrist_rotate = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_wrist_rotate")
 
     # --- Left Gripper Actuators (2 finger joints) ---
-    left_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_left_finger")  # Left finger (0 = open, 0.022 = closed)
-    left_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_right_finger")  # Right finger (0 = open, 0.022 = closed)
+    left_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_left_finger")  # Left finger (0.015 = open, 0.037 = closed)
+    left_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_right_finger")  # Right finger (0.015 = open, 0.037 = closed)
 
     # --- Pan-Tilt Camera Actuators (2 DOF) ---
     # The camera is mounted on a 2-axis gimbal allowing it to look around
@@ -251,20 +253,20 @@ def main():
 
     # Set initial joint positions (data.qpos stores all joint positions)
     # Order matches the order joints are defined in the XML
-    # qpos order: base(3) + pan_tilt(2) + right_arm(5) + right_gripper(2) + left_arm(5) + left_gripper(2) = 19
+    # qpos order: base(3) + pan_tilt(2) + right_arm(6) + right_gripper(2) + left_arm(6) + left_gripper(2) = 21
     home_qpos = [
         # Mobile base (3 DOF)
         0, 0, 0,              # x=0m, y=0m, theta=0rad (at origin, facing forward)
         # Pan-tilt camera (2 DOF)
         0, 0,                 # pan=0rad, tilt=0rad (camera facing forward)
-        # Right WX200 arm (5 DOF)
-        0, 0, 0, 0, 0,        # waist, shoulder, elbow, wrist_angle, wrist_rotate
+        # Right WX250s arm (6 DOF)
+        0, 0, 0, 0, 0, 0,     # waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate
         # Right gripper fingers (2 DOF)
-        0, 0,                 # left_finger, right_finger (0 = open)
-        # Left WX200 arm (5 DOF)
-        0, 0, 0, 0, 0,        # waist, shoulder, elbow, wrist_angle, wrist_rotate
+        0.015, 0.015,         # left_finger, right_finger (0.015 = open)
+        # Left WX250s arm (6 DOF)
+        0, 0, 0, 0, 0, 0,     # waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate
         # Left gripper fingers (2 DOF)
-        0, 0                  # left_finger, right_finger (0 = open)
+        0.015, 0.015          # left_finger, right_finger (0.015 = open)
     ]
     data.qpos[:len(home_qpos)] = home_qpos
 
@@ -278,19 +280,21 @@ def main():
     data.ctrl[right_arm_ctrl_waist] = 0.0
     data.ctrl[right_arm_ctrl_shoulder] = 0.0
     data.ctrl[right_arm_ctrl_elbow] = 0.0
+    data.ctrl[right_arm_ctrl_forearm_roll] = 0.0
     data.ctrl[right_arm_ctrl_wrist_angle] = 0.0
     data.ctrl[right_arm_ctrl_wrist_rotate] = 0.0
-    data.ctrl[right_gripper_ctrl_left_finger] = 0.0  # 0 = fully open
-    data.ctrl[right_gripper_ctrl_right_finger] = 0.0  # 0 = fully open
+    data.ctrl[right_gripper_ctrl_left_finger] = 0.015  # 0.015 = fully open
+    data.ctrl[right_gripper_ctrl_right_finger] = 0.015  # 0.015 = fully open
 
     # --- Left arm controls (all at zero = home position) ---
     data.ctrl[left_arm_ctrl_waist] = 0.0
     data.ctrl[left_arm_ctrl_shoulder] = 0.0
     data.ctrl[left_arm_ctrl_elbow] = 0.0
+    data.ctrl[left_arm_ctrl_forearm_roll] = 0.0
     data.ctrl[left_arm_ctrl_wrist_angle] = 0.0
     data.ctrl[left_arm_ctrl_wrist_rotate] = 0.0
-    data.ctrl[left_gripper_ctrl_left_finger] = 0.0  # 0 = fully open
-    data.ctrl[left_gripper_ctrl_right_finger] = 0.0  # 0 = fully open
+    data.ctrl[left_gripper_ctrl_left_finger] = 0.015  # 0.015 = fully open
+    data.ctrl[left_gripper_ctrl_right_finger] = 0.015  # 0.015 = fully open
 
     # --- Camera pan-tilt controls (start centered) ---
     data.ctrl[camera_pan_ctrl] = 0.0   # 0 = looking straight ahead
@@ -303,7 +307,7 @@ def main():
     # STEP 6: Set up the demo motion with speed-controlled targets
     # ==========================================================================
     print("=" * 60)
-    print("TidyBot2 Bimanual WX200 Arms - Movement Demo")
+    print("TidyBot2 Bimanual WX250s Arms - Movement Demo")
     print("=" * 60)
     print(f"\nSpeed Settings:")
     print(f"  Linear speed:  {BASE_LINEAR_SPEED:.2f} m/s")

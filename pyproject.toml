@@ -1,7 +1,7 @@
 [project]
 name = "collaborative-robotics-2026"
 version = "0.1.0"
-description = "TidyBot2 with WX200 arm control for MuJoCo simulation and Real Hardware"
+description = "TidyBot2 with WX250s arm control for MuJoCo simulation and Real Hardware"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

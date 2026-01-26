@@ -101,12 +101,12 @@ class MuJoCoBridgeNode(Node):
 
             if repo_root:
                 model_path = os.path.join(
-                    repo_root, 'simulation', 'assets', 'mujoco', 'scene_wx200_bimanual.xml'
+                    repo_root, 'simulation', 'assets', 'mujoco', 'scene_wx250s_bimanual.xml'
                 )
             else:
                 # Last resort: assume we're in ros2_ws inside the repo
                 model_path = os.path.expanduser(
-                    '~/Documents/collaborative-robotics-2026/simulation/assets/mujoco/scene_wx200_bimanual.xml'
+                    '~/Documents/collaborative-robotics-2026/simulation/assets/mujoco/scene_wx250s_bimanual.xml'
                 )
 
         self.get_logger().info(f'Loading MuJoCo model from: {model_path}')

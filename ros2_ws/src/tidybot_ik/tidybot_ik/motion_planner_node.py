@@ -34,11 +34,12 @@ from tidybot_msgs.srv import PlanToTarget
 class MotionPlannerNode(Node):
     """Motion planner with IK, collision checking, and singularity detection."""
 
-    # Joint limits (from tidybot_wx200_bimanual.xml)
+    # Joint limits (from tidybot_wx250s_bimanual.xml)
     JOINT_LIMITS = {
         'waist': (-3.14159, 3.14159),
-        'shoulder': (-1.8849, 1.9722),
-        'elbow': (-1.8849, 1.6232),
+        'shoulder': (-1.8849, 1.9897),
+        'elbow': (-2.1468, 1.6057),
+        'forearm_roll': (-3.14159, 3.14159),
         'wrist_angle': (-1.7453, 2.1468),
         'wrist_rotate': (-3.14159, 3.14159),
     }
@@ -68,7 +69,7 @@ class MotionPlannerNode(Node):
         else:
             # Default: look relative to workspace
             model_path = Path(__file__).parent.parent.parent.parent.parent.parent / \
-                'simulation/assets/mujoco/tidybot_wx200_bimanual.xml'
+                'simulation/assets/mujoco/tidybot_wx250s_bimanual.xml'
 
         if not model_path.exists():
             self.get_logger().error(f'MuJoCo model not found: {model_path}')
@@ -82,12 +83,12 @@ class MotionPlannerNode(Node):
         # Initialize Mink configuration
         self.configuration = mink.Configuration(self.model)
 
-        # Joint name mappings
+        # Joint name mappings (6-DOF WX250s)
         self.arm_joints = {
             'right': ['right_waist', 'right_shoulder', 'right_elbow',
-                      'right_wrist_angle', 'right_wrist_rotate'],
+                      'right_forearm_roll', 'right_wrist_angle', 'right_wrist_rotate'],
             'left': ['left_waist', 'left_shoulder', 'left_elbow',
-                     'left_wrist_angle', 'left_wrist_rotate'],
+                     'left_forearm_roll', 'left_wrist_angle', 'left_wrist_rotate'],
         }
 
         # Get joint qpos addresses
