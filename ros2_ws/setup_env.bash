@@ -86,6 +86,11 @@ else
     fi
 fi
 
+export ROS_DOMAIN_ID=42 # domain id for the robot
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp # DDS implementation
+echo "✓ Set ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "✓ Set RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"
+
 echo ""
 echo "Environment ready!"
 echo "  Python: $(which python3) (ROS2 system Python)"
