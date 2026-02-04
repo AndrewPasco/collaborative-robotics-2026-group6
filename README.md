@@ -197,7 +197,53 @@ ros2 topic list
 ros2 topic echo /joint_states
 ```
 
-### 6.2 Remote Hardware Access
+### 6.2 Adding New Scripts and Launch Files
+
+To maintain project organization and ensure new ROS2 nodes and launch files are correctly integrated:
+
+#### 6.2.1 Python Scripts (Nodes)
+
+1.  **Placement**: New Python scripts (ROS2 nodes) should be placed in subdirectories within `ros2_ws/src/tidybot_bringup/scripts/`. For example:
+    ```
+    ros2_ws/src/tidybot_bringup/scripts/
+    ├── vision/
+    │   └── my_vision_node.py
+    └── manipulation/
+        └── my_manipulation_node.py
+    ```
+2.  **Executable Configuration**: To make your new Python script executable as a ROS2 run command (`ros2 run tidybot_bringup <script_name>.py`), you **must** add it to `ros2_ws/src/tidybot_bringup/CMakeLists.txt`. Locate the `install(PROGRAMS ...)` block and add your script's relative path:
+    ```cmake
+    install(PROGRAMS
+      scripts/vision/my_vision_node.py
+      scripts/manipulation/my_manipulation_node.py
+      # ... existing scripts ...
+      DESTINATION lib/${PROJECT_NAME}
+    )
+    ```
+    After modifying `CMakeLists.txt`, rebuild your workspace: `cd ros2_ws && colcon build`.
+
+#### 6.2.2 Launch Files
+
+1.  **Placement**: New launch files (e.g., `my_task_launch.py`) should be placed in `ros2_ws/src/tidybot_bringup/launch/`.
+2.  **Example Structure**: You can adapt existing launch files (e.g., `sim.launch.py`) as a template. A minimal launch file looks like this:
+    ```python
+    from launch import LaunchDescription
+    from launch_ros.actions import Node
+
+    def generate_launch_description():
+        return LaunchDescription([
+            Node(
+                package='your_package_name', # e.g., 'tidybot_bringup'
+                executable='your_node_script_name.py', # e.g., 'my_vision_node.py'
+                name='my_node_name',
+                output='screen',
+                parameters=[{'param_name': 'param_value'}] # Optional parameters
+            )
+        ])
+    ```
+    To run your new launch file: `ros2 launch tidybot_bringup my_task_launch.py`.
+
+### 6.3 Remote Hardware Access
 To connect to the physical robot:
 
 1.  **Install Cyclone DDS (one time):**
