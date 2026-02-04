@@ -1,25 +1,25 @@
-# ME 326: Collaborative Robotics
+# GEMINI.md - Development Guide for TidyBot2
 
-This repository contains the project for Stanford's ME 326: Collaborative Robotics course (Winter 2026). The goal of this project is to make the TidyBot2 mobile robot an effective collaborator and assistant for a human counterpart. You will use natural language to communicate tasks to the robot, which will then use perception to understand its environment and control its motion to complete the task.
+## Development Rules for Gemini
 
-## 1. Project Goal & Core Tasks
+1.  **Always commit and push changes** - After making code changes, add, commit, and push to the repository (unless the user specifies otherwise).
+2.  **Use descriptive commit messages** - Summarize what was changed and why.
+3.  **Test before committing** - Ensure changes work before pushing.
+4.  **Update documentation** - Keep the project's `README.md` and this `GEMINI.md` file up to date with any significant changes.
 
-The goal of this project is to make a mobile robot an effective collaborator and assistant for a human counterpart. The platform used is the TidyBot++ base with a custom bimanual manipulation setup using 6-DoF WidowX Arms, an Intel RealSense depth camera, and a LiDAR for localization.
+## 1. Project Goal: ME 326 Collaborative Robot
 
-Students will use natural communication methods (e.g., natural language) to communicate tasks to the robot. The robot will use perception to understand the environment and control its motion to complete the requested task.
+The goal of this project is to make the TidyBot2 mobile robot an effective collaborator and assistant for a human counterpart for Stanford's ME 326 course. You will use natural language to communicate tasks to the robot, which will then use perception to understand its environment and control its motion to complete the task.
+
+The code for this project is located in the `collaborative-robotics-2026` submodule.
+
+### 1.1 Core Tasks
 
 Every team must complete three tasks:
 
-1.  **Object Retrieval:** Use language to request the robot to retrieve a specific object and bring it to a location (e.g., "locate the apple in the scene and retrieve it").
-2.  **Sequential Task:** Use language to request a series of actions, like placing one object into another (e.g., "find the red apple and place it in the basket").
-3.  **Group Chosen Task:** A team-defined task that involves perception, planning, and control.
-
-### Group Chosen Task: Liquid Transport
-
-For our third task, the Tidybot will transport a “liquid” from one vessel to another, using voice commands.
-
-*   **Baseline:** Pick up a known container and pour a liquid (or stand-in material like sand) into a known second container.
-*   **Potential Extensions:** Unscrew a lid before pouring; pour a specific amount of liquid based on language input.
+1.  **Object Retrieval:** A user will ask the robot to retrieve a specific object and bring it to a location (e.g., "locate the apple in the scene and retrieve it").
+2.  **Sequential Task:** A user will ask the robot to perform a sequence of actions, like placing one object into another (e.g., "find the red apple and place it in the basket").
+3.  **Group Chosen Task:** A team-defined task that involves perception, planning, and control. An example is having the robot transport a "liquid" from one vessel to another, which might involve unscrewing a lid, pouring, and measuring.
 
 ## 2. System Overview: TidyBot2 Bimanual Manipulator
 
@@ -47,8 +47,7 @@ All commands should be run from within the `collaborative-robotics-2026` directo
 Use the pre-built Docker image with VNC desktop access.
 
 ```bash
-# 1. Clone the repo (if you are in windows, we highly, highly recommend WSL Bash)
-git clone https://github.com/armlabstanford/collaborative-robotics-2026.git
+# 1. Navigate into the submodule
 cd collaborative-robotics-2026
 
 # 2. Pull the pre-built image
@@ -56,8 +55,8 @@ docker pull peasant98/tidybot2:humble
 
 # 3. Run with the repo mounted to sync local changes
 # Note: We are mounting the parent directory to make both the main repo and submodule available
-docker run -p 6080:80 --shm-size=2g \
-    -v $(pwd):/home/ubuntu/Desktop/collaborative \
+docker run -p 6080:80 --shm-size=2g 
+    -v $(pwd)/..:/home/ubuntu/Desktop/collaborative 
     peasant98/tidybot2:humble
 
 # 4. Access the container's desktop via browser: http://127.0.0.1:6080/
@@ -67,24 +66,10 @@ cd /home/ubuntu/Desktop/collaborative/collaborative-robotics-2026
 ./setup.sh
 ```
 
-**Syncing updates:** With the volume mount, any `git pull` on your host machine will immediately reflect inside the running container.
-
-**Available commands in container:**
-| Command | Description |
-|---------|-------------|
-| `tidybot-sim` | MuJoCo standalone simulation |
-| `tidybot-ros` | ROS2 + RViz + MuJoCo |
-| `tidybot-ros-no-rviz` | ROS2 + MuJoCo (no RViz) |
-| `tidybot-test-base` | Test base movement |
-| `tidybot-test-arms` | Test arm control |
-
 ### 3.2 Option B: Native Ubuntu 22.04
 
-If you have Ubuntu 22.04 (native install, dual-boot, or VM), use the setup script:
-
 ```bash
-# 1. Clone the repository
-git clone https://github.com/armlabstanford/collaborative-robotics-2026.git
+# 1. Navigate into the submodule
 cd collaborative-robotics-2026
 
 # 2. Run the setup script
@@ -98,10 +83,6 @@ source setup_env.bash
 ```
 
 ## 4. Running the Code
-
-## Quick Start SIMULATION
-
-### Option 1: Standalone MuJoCo Simulation (No ROS2)
 
 ### 4.1 Standalone MuJoCo Simulation (No ROS2)
 ```bash
@@ -134,42 +115,10 @@ ros2 run tidybot_bringup test_base_sim.py
 ros2 run tidybot_bringup test_arms_sim.py
 ros2 run tidybot_bringup example_state_machine.py
 ```
-**Launch Options:**
-```bash
-# Disable RViz
-ros2 launch tidybot_bringup sim.launch.py use_rviz:=false
 
-# Disable MuJoCo viewer
-ros2 launch tidybot_bringup sim.launch.py show_mujoco_viewer:=false
-```
+## 5. Technical Deep Dive
 
-## Quick Start REAL
-
-NOTE: You do not need to re-run "colcon build" for every new terminal, re-build is only necessary whenver source code was modified. Make sure to re-source for new terminals.
-
-**Terminal 1: Launch Initialization of TidyBot**
-```bash
-cd ros2_ws
-source setup_env.bash 
-
-# Launch bringup
-ros2 launch tidybot_bringup real.launch.py
-```
-
-**Terminal 2: Run Command Script**
-```bash
-cd ros2_ws
-source setup_env.bash 
-
-# Test base movement
-ros2 run tidybot_bringup test_base_real.py
-
-# Test bimanual arms
-ros2 run tidybot_bringup test_arms_real.py
-```
-
-## Repository Structure
-
+### 5.1 Project Structure
 ```
 collaborative-robotics-2026/
 ├── simulation/              # Standalone MuJoCo simulation & assets
@@ -244,48 +193,12 @@ To connect to the physical robot:
 4.  **Start Robot Drivers:** On the robot, run `ros2 launch tidybot_bringup robot.launch.py`.
 5.  **Verify Connection:** On your machine, run `ros2 topic list` and check for robot topics.
 
-## 7. Troubleshooting
+## 7. Resources & Authors
 
-**MuJoCo rendering issues:**
-```bash
-sudo apt install -y mesa-utils
-glxinfo | grep "OpenGL version"
-```
-
-**Python import errors:**
-```bash
-# Always source environment first
-source ros2_ws/setup_env.bash
-```
-
-**colcon build fails:**
-```bash
-# Ensure ROS2 is sourced before building
-source /opt/ros/humble/setup.bash
-cd ros2_ws && colcon build
-```
-
-## 8. Resources & Authors
-
-**Authors:**
-*   Mete Gumusayak
-*   Ottavia Personeni
-*   Luke Yuen
-*   Aditya Kothari
-*   Yash Rampuria
-*   Rohit Arumugam
-*   Andrew Pasco
-*   Alex Qiu & Matt Strong (Stanford ARM Lab)
-
-**Course:** ME 326: Collaborative Robotics, Winter 2026 (Prof. Monroe Kennedy)
-
-**Key Resources:**
--   [TidyBot2 Project Page](https://tidybot2.github.io/)
--   [MuJoCo Documentation](https://mujoco.readthedocs.io/)
--   [uv Documentation](https://docs.astral.sh/uv/)
--   [Interbotix WX250s Docs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx250s.html)
--   [TidyBot Paper](https://arxiv.org/abs/2305.05658)
--   [TidyBot2 Paper](https://arxiv.org/pdf/2412.10447)
-
----
-*This project is for ME 326 at Stanford University, Winter 2026.*
+-   **Authors:** Alex Qiu & Matt Strong (Stanford ARM Lab)
+-   **Course:** ME 326: Collaborative Robotics, Winter 2026 (Prof. Monroe Kennedy)
+-   **Key Resources:**
+    -   [TidyBot2 Project Page](https://tidybot2.github.io/)
+    -   [MuJoCo Documentation](https://mujoco.readthedocs.io/)
+    -   [uv Documentation](https://docs.astral.sh/uv/)
+    -   [Interbotix WX250s Docs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx250s.html)

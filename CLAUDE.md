@@ -1,355 +1,204 @@
-# CLAUDE.md - Development Guide
+# CLAUDE.md - Development Guide for TidyBot2
 
-## Rules for Claude
+## Development Rules for Claude
 
-1. **Always commit and push changes** - After making code changes, Claude should add, commit, and push to the repository (unless the user specifies otherwise).
-2. **Use descriptive commit messages** - Summarize what was changed and why.
-3. **Test before committing** - Ensure changes work before pushing.
-4. **Update documentation** - Keep README.md and CLAUDE.md up to date with any significant changes.
+1.  **Always commit and push changes** - After making code changes, add, commit, and push to the repository (unless the user specifies otherwise).
+2.  **Use descriptive commit messages** - Summarize what was changed and why.
+3.  **Test before committing** - Ensure changes work before pushing.
+4.  **Update documentation** - Keep the project's `README.md` and this `CLAUDE.md` file up to date with any significant changes.
 
-## Project Overview
+## 1. Project Goal: ME 326 Collaborative Robot
 
-**TidyBot2** - A mobile robot platform with bimanual WX250s 6-DOF arms for Stanford's Collaborative Robotics class. This repository provides MuJoCo simulation and ROS2 control software.
+The goal of this project is to make the TidyBot2 mobile robot an effective collaborator and assistant for a human counterpart for Stanford's ME 326 course. You will use natural language to communicate tasks to the robot, which will then use perception to understand its environment and control its motion to complete the task.
 
-### Robot Configuration
-- **Mobile Base:** 3 DOF (x, y, theta)
-- **Arms:** 2x WX250s (6 DOF each: waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate)
-- **Grippers:** 2x Interbotix gripper (prismatic fingers)
-- **Camera:** Pan-tilt RealSense D435 (RGB + Depth)
+The code for this project is located in the `collaborative-robotics-2026` submodule.
 
-## Quick Start (Ubuntu 22.04)
+### 1.1 Core Tasks
 
-### Prerequisites
+Every team must complete three tasks:
 
-#### 1. Install ROS2 Humble
+1.  **Object Retrieval:** A user will ask the robot to retrieve a specific object and bring it to a location (e.g., "locate the apple in the scene and retrieve it").
+2.  **Sequential Task:** A user will ask the robot to perform a sequence of actions, like placing one object into another (e.g., "find the red apple and place it in the basket").
+3.  **Group Chosen Task:** A team-defined task that involves perception, planning, and control. An example is having the robot transport a "liquid" from one vessel to another, which might involve unscrewing a lid, pouring, and measuring.
+
+## 2. System Overview: TidyBot2 Bimanual Manipulator
+
+### 2.1 Robot Configuration
+
+-   **Mobile Base:** 3 DOF Holonomic Base (x, y, theta)
+-   **Arms:** 2x WidowX WX250s (6 DOF each)
+-   **Grippers:** 2x Interbotix Gripper (Prismatic Fingers)
+-   **Camera:** Pan-tilt Intel RealSense D435 (RGB + Depth)
+-   **LiDAR:** RPLIDAR for localization and navigation.
+
+### 2.2 Software Stack
+
+-   **OS:** Ubuntu 22.04
+-   **Middleware:** ROS 2 Humble
+-   **Simulation:** MuJoCo
+-   **Python Environment:** `uv`
+
+## 3. Getting Started
+
+All commands should be run from within the `collaborative-robotics-2026` directory.
+
+### 3.1 Option A: Docker (Recommended for Any OS)
+
+Use the pre-built Docker image with VNC desktop access.
+
 ```bash
-# Add ROS2 repository
-sudo apt update && sudo apt install -y software-properties-common curl
-sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+# 1. Navigate into the submodule
+cd collaborative-robotics-2026
 
-# Install ROS2 Humble desktop
-sudo apt update
-sudo apt install -y ros-humble-desktop
+# 2. Pull the pre-built image
+docker pull peasant98/tidybot2:humble
 
-# Install additional ROS2 packages
-sudo apt install -y ros-humble-xacro ros-humble-robot-state-publisher \
-    ros-humble-joint-state-publisher ros-humble-rviz2
+# 3. Run with the repo mounted to sync local changes
+# Note: We are mounting the parent directory to make both the main repo and submodule available
+docker run -p 6080:80 --shm-size=2g 
+    -v $(pwd)/..:/home/ubuntu/Desktop/collaborative 
+    peasant98/tidybot2:humble
+
+# 4. Access the container's desktop via browser: http://127.0.0.1:6080/
+
+# 5. In the container's terminal, navigate to the project and run the setup script
+cd /home/ubuntu/Desktop/collaborative/collaborative-robotics-2026
+./setup.sh
 ```
 
-#### 2. Install uv (Python package manager)
+### 3.2 Option B: Native Ubuntu 22.04
+
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc  # or restart terminal
+# 1. Navigate into the submodule
+cd collaborative-robotics-2026
+
+# 2. Run the setup script
+# This will install ROS2 Humble, system dependencies, Python packages, and build the workspace.
+./setup.sh
+```
+**Important:** After setup, source the environment in every new terminal:
+```bash
+cd collaborative-robotics-2026/ros2_ws
+source setup_env.bash
 ```
 
-#### 3. Install System Dependencies
+## 4. Running the Code
+
+### 4.1 Standalone MuJoCo Simulation (No ROS2)
 ```bash
-sudo apt install -y python3-colcon-common-extensions python3-pip \
-    libgl1-mesa-dev libglfw3-dev libegl1-mesa-dev
-```
+cd collaborative-robotics-2026/simulation/scripts
 
-### Setup
-
-```bash
-cd /home/arm-beast/Desktop/collab/collaborative-robotics-2026
-
-# Install Python dependencies
-uv sync
-
-# Build ROS2 workspace
-cd ros2_ws
-source /opt/ros/humble/setup.bash
-colcon build
-```
-
-## Running the Code
-
-### Option 1: Standalone MuJoCo Simulation (No ROS2)
-```bash
-cd simulation/scripts
-
-# Bimanual arm demo with camera
+# Bimanual arm demo with camera control
 uv run python test_move.py
 
 # Object manipulation demo
 uv run python pick_up_block.py
 ```
 
-### Option 2: Full ROS2 Simulation
+### 4.2 Full ROS2 Simulation
 
 **Terminal 1 - Launch simulation:**
 ```bash
-cd ros2_ws
+cd collaborative-robotics-2026/ros2_ws
 source setup_env.bash
 ros2 launch tidybot_bringup sim.launch.py
 ```
+This opens RViz2 and the MuJoCo viewer.
 
 **Terminal 2 - Run test scripts:**
 ```bash
-cd ros2_ws
+cd collaborative-robotics-2026/ros2_ws
 source setup_env.bash
 
-# Test base movement
+# Test base, arms, camera, or run a state machine example
 ros2 run tidybot_bringup test_base_sim.py
-
-# Test bimanual arms
 ros2 run tidybot_bringup test_arms_sim.py
-
-# Test camera pan-tilt
-ros2 run tidybot_bringup test_camera_sim.py
-
-# Advanced state machine example
 ros2 run tidybot_bringup example_state_machine.py
 ```
 
-**Launch Options:**
-```bash
-# Disable RViz
-ros2 launch tidybot_bringup sim.launch.py use_rviz:=false
+## 5. Technical Deep Dive
 
-# Disable MuJoCo viewer
-ros2 launch tidybot_bringup sim.launch.py show_mujoco_viewer:=false
-```
-
-### Option 3: Real Hardware (Local)
-
-**On the robot mini PC:**
-```bash
-cd ros2_ws
-source setup_env.bash
-ros2 launch tidybot_bringup real.launch.py
-```
-
-### Option 4: Remote Control (Network)
-
-Control TidyBot2 from your own machine over the network using native ROS2.
-
-**Step 1: Start robot (on mini PC via SSH):**
-```bash
-ssh locobot@<ROBOT_IP>
-export ROS_DOMAIN_ID=42
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-cd ~/collaborative-robotics-2026/ros2_ws
-source install/setup.bash
-ros2 launch tidybot_bringup robot.launch.py
-```
-
-**Step 2: Connect from your machine:**
-```bash
-# Install Cyclone DDS (one time)
-sudo apt install ros-humble-rmw-cyclonedds-cpp
-
-# Set environment (must match robot!)
-export ROS_DOMAIN_ID=42
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-
-# Build tidybot_msgs on your machine (one time)
-cd ~/ros2_ws/src
-git clone https://github.com/Stanford-ARM-Lab/collaborative-robotics-2026.git
-cd ~/ros2_ws && colcon build --packages-select tidybot_msgs
-source install/setup.bash
-
-# Test connection
-ros2 topic list  # Should see /cmd_vel, /joint_states, etc.
-```
-
-**Step 3: Control the robot:**
-```bash
-# Move base forward
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.1}}" -r 10
-
-# Run comprehensive test
-ros2 run tidybot_bringup test_real_hardware.py
-
-# Launch RViz remotely
-ros2 launch tidybot_client client_rviz.launch.py
-```
-
-See [docs/remote_setup.md](docs/remote_setup.md) for detailed network configuration.
-
-## Project Structure
-
+### 5.1 Project Structure
 ```
 collaborative-robotics-2026/
-├── simulation/              # Standalone MuJoCo simulation
-│   ├── scripts/             # Test scripts (test_move.py, pick_up_block.py)
-│   └── assets/              # MuJoCo models and meshes
-│
-├── docs/
-│   └── remote_setup.md      # Remote control setup guide
-│
+├── simulation/              # Standalone MuJoCo simulation & assets
 └── ros2_ws/                 # ROS2 workspace
     ├── setup_env.bash       # Environment setup (source this!)
     └── src/
-        ├── tidybot_bringup/         # Launch files & test scripts
-        ├── tidybot_client/          # Remote client utilities & DDS configs
-        ├── tidybot_control/         # Arm/base/pan-tilt controllers
-        ├── tidybot_description/     # URDF/XACRO robot model
-        ├── tidybot_ik/              # Motion planning & IK
-        ├── tidybot_msgs/            # Custom messages & services
-        ├── tidybot_mujoco_bridge/   # MuJoCo-ROS2 bridge (simulation)
-        └── tidybot_network_bridge/  # Image compression for remote
+        ├── tidybot_bringup/     # Launch files & test scripts
+        ├── tidybot_client/      # Remote client utilities & DDS configs
+        ├── tidybot_control/     # Arm/base/pan-tilt controllers
+        ├── tidybot_description/ # URDF/XACRO robot model
+        ├── tidybot_ik/          # Motion planning & IK (using mink)
+        ├── tidybot_msgs/        # Custom messages & services
+        └── tidybot_mujoco_bridge/ # MuJoCo-ROS2 bridge
 ```
 
-## Key ROS2 Topics
+### 5.2 Key ROS2 Topics & Messages
 
 | Topic | Type | Description |
-|-------|------|-------------|
+|---|---|---|
 | `/cmd_vel` | geometry_msgs/Twist | Base velocity commands |
 | `/left_arm/command` | ArmCommand | Left arm joint positions + duration |
 | `/right_arm/command` | ArmCommand | Right arm joint positions + duration |
 | `/left_gripper/command` | GripperCommand | Left gripper (0=open, 1=closed) |
-| `/right_gripper/command` | GripperCommand | Right gripper |
-| `/camera/pan_tilt` | PanTilt | Camera pan/tilt angles |
+| `/right_gripper/command`| GripperCommand | Right gripper |
 | `/joint_states` | sensor_msgs/JointState | All joint positions/velocities |
-| `/camera/rgb/image_raw` | sensor_msgs/Image | RGB camera feed |
-| `/camera/depth/image_raw` | sensor_msgs/Image | Depth camera feed |
 
-## Custom Message Types
-
-**ArmCommand.msg** - Joint space control:
+**`ArmCommand.msg`**:
 ```
 float64[6] joint_positions  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 float64 duration            # Movement time in seconds
 ```
 
-**GripperCommand.msg**:
-```
-float64 position  # 0.0 (open) to 1.0 (closed)
-float64 effort    # 0.0 (low) to 1.0 (high force)
-```
+### 5.3 Core Software Libraries
 
-## WX250s Arm Joint Limits
+-   **Perception (VLMs):** You are encouraged to use Visual Language Models for object detection from language commands.
+    -   Google Gemini can be used with provided cloud credits.
+    -   Local models like `YOLOv11` with `CLIP` are also excellent options.
+-   **Grasping:** `GraspAnything` can be used to propose candidate grasp poses on objects.
+-   **Motion Planning (IK):** The `tidybot_ik` package uses `mink` for lightweight inverse kinematics and trajectory optimization, as an alternative to MoveIt2.
 
-| Joint | Min (rad) | Max (rad) | Range (deg) |
-|-------|-----------|-----------|-------------|
-| Waist | -3.14 | 3.14 | 360° |
-| Shoulder | -1.88 | 1.99 | 222° |
-| Elbow | -2.15 | 1.61 | 215° |
-| Forearm Roll | -3.14 | 3.14 | 360° |
-| Wrist Angle | -1.75 | 2.15 | 223° |
-| Wrist Rotate | -3.14 | 3.14 | 360° |
+## 6. Development Workflow
 
-## Common Development Commands
-
+### 6.1 Common Commands
 ```bash
-# Rebuild after code changes
-cd ros2_ws && colcon build
+# Rebuild workspace after code changes
+cd collaborative-robotics-2026/ros2_ws && colcon build
 
-# Rebuild specific package
-colcon build --packages-select tidybot_control
+# Rebuild a specific package
+cd collaborative-robotics-2026/ros2_ws && colcon build --packages-select tidybot_control
 
-# Check ROS2 topics
+# Check ROS2 topics and messages
 ros2 topic list
 ros2 topic echo /joint_states
-
-# Check available services
-ros2 service list
 ```
 
-## Troubleshooting
+### 6.2 Remote Hardware Access
+To connect to the physical robot:
 
-**MuJoCo rendering issues:**
-```bash
-# Ensure OpenGL is working
-sudo apt install -y mesa-utils
-glxinfo | grep "OpenGL version"
-```
+1.  **Install Cyclone DDS (one time):**
+    ```bash
+    sudo apt install ros-humble-rmw-cyclonedds-cpp
+    ```
+2.  **Configure Environment:** Add these lines to your `~/.bashrc` file. The `ROS_DOMAIN_ID` will be provided by the teaching team.
+    ```bash
+    export ROS_DOMAIN_ID=<ID>
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    ```
+3.  **SSH into Robot:** The password is `locobot`.
+    ```bash
+    ssh -X locobot@<ROBOT_IP>
+    ```
+4.  **Start Robot Drivers:** On the robot, run `ros2 launch tidybot_bringup robot.launch.py`.
+5.  **Verify Connection:** On your machine, run `ros2 topic list` and check for robot topics.
 
-**Python import errors:**
-```bash
-# Always source the environment first
-source ros2_ws/setup_env.bash
-```
+## 7. Resources & Authors
 
-**colcon build fails:**
-```bash
-# Ensure ROS2 is sourced before building
-source /opt/ros/humble/setup.bash
-cd ros2_ws && colcon build
-```
-
-## Dependencies
-
-Managed via `uv` (see `pyproject.toml`):
-- mujoco >= 3.2.0
-- numpy >= 1.26.0
-- opencv-python >= 4.0.0
-- mink >= 0.0.6 (trajectory optimization)
-- pyrealsense2 >= 2.55.0
-
-## Docker
-
-Build and run with VNC desktop access:
-
-```bash
-# 1. Clone the repo (if you haven't already)
-git clone https://github.com/Stanford-ARM-Lab/collaborative-robotics-2026.git
-cd collaborative-robotics-2026
-
-# 2. Build the Docker image
-docker build -f Docker/Dockerfile -t tidybot2:humble .
-
-# 3. Run with the repo mounted (changes sync between host and container)
-docker run -p 6080:80 --shm-size=2g \
-    -v $(pwd):/home/ubuntu/Desktop/collaborative \
-    tidybot2:humble
-
-# Access via browser: http://127.0.0.1:6080/
-```
-
-**Syncing updates:** With the volume mount, any `git pull` on your host machine will immediately reflect inside the running container. This makes it easy to pull the latest changes without restarting the container.
-
-**Available commands in container:**
-| Command | Description |
-|---------|-------------|
-| `tidybot-sim` | MuJoCo standalone simulation |
-| `tidybot-ros` | ROS2 + RViz + MuJoCo |
-| `tidybot-ros-no-rviz` | ROS2 + MuJoCo (no RViz) |
-| `tidybot-test-base` | Test base movement |
-| `tidybot-test-arms` | Test arm control |
-
-## Real Hardware Setup
-
-### Motor ID Configuration (Shared U2D2 Bus)
-
-If using a **single U2D2** for all Dynamixel motors (both arms + pan-tilt), you must remap motor IDs to avoid conflicts:
-
-| Component | Default IDs | Remapped IDs |
-|-----------|-------------|--------------|
-| Right Arm | 1-6, gripper 7 | 1-6, gripper 7 (keep default) |
-| Left Arm | 1-6, gripper 7 | 11-16, gripper 17 |
-| Pan-Tilt | 1-2 | 21-22 |
-
-**How to remap motor IDs using Dynamixel Wizard 2.0:**
-1. Connect **only ONE motor** at a time to a U2D2
-2. Open Dynamixel Wizard 2.0 and scan for the motor
-3. Select the motor and go to the Control Table
-4. Find `ID` (address 7) and change it to the new value
-5. Click "Save" - the motor will now respond to the new ID
-6. Repeat for each motor that needs remapping
-
-**If using separate U2D2s** (one per arm + one for pan-tilt), you can keep default IDs.
-
-### Phoenix 6 Mobile Base
-
-The mobile base uses Phoenix 6 (CTRE) motors over CAN bus. Prerequisites:
-- Phoenix 6 library: `pip install phoenix6`
-- Ruckig trajectory library: `pip install ruckig`
-- CAN interface configured on mini PC
-- Real-time permissions (edit `/etc/security/limits.d/99-realtime.conf`)
-
-### Environment Variables
-
-Add to `~/.bashrc` on the robot mini PC:
-```bash
-export TIDYBOT2_PATH=/home/locobot/tidybot2
-export ROS_DOMAIN_ID=42
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-```
-
-## Authors
-
-Alex Qiu & Matt Strong - Stanford ARM Lab
-For Professor Monroe Kennedy's Collaborative Robotics Class (2026)
+-   **Authors:** Alex Qiu & Matt Strong (Stanford ARM Lab)
+-   **Course:** ME 326: Collaborative Robotics, Winter 2026 (Prof. Monroe Kennedy)
+-   **Key Resources:**
+    -   [TidyBot2 Project Page](https://tidybot2.github.io/)
+    -   [MuJoCo Documentation](https://mujoco.readthedocs.io/)
+    -   [uv Documentation](https://docs.astral.sh/uv/)
+    -   [Interbotix WX250s Docs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx250s.html)
