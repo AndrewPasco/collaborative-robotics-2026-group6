@@ -1,11 +1,11 @@
-# CLAUDE.md - Development Guide for TidyBot2
+# GEMINI.md - Development Guide for TidyBot2
 
-## Development Rules for Claude
+## Development Rules for Gemini
 
 1.  **Always commit and push changes** - After making code changes, add, commit, and push to the repository (unless the user specifies otherwise).
 2.  **Use descriptive commit messages** - Summarize what was changed and why.
 3.  **Test before committing** - Ensure changes work before pushing.
-4.  **Update documentation** - Keep the project's `README.md` and this `CLAUDE.md` file up to date with any significant changes.
+4.  **Update documentation** - Keep the project's `README.md` and this `GEMINI.md` file up to date with any significant changes.
 
 ## 1. Project Goal: ME 326 Collaborative Robot
 
