@@ -37,6 +37,13 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
+  scripts/test_microphone.py
+  scripts/test_stt.py
+  scripts/audio_item_detector.py
+  scripts/brain_node.py
+  scripts/navigation_node.py
+  scripts/manipulation_node.py
+  scripts/speech_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
