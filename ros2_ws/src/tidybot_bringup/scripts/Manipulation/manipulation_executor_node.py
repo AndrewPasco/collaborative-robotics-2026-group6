@@ -24,6 +24,17 @@ HOW ROS 2 TOPICS / SUBSCRIPTIONS WORK (quick reference for the team):
   • Services are request/response (like a function call across nodes)
   • Actions are for long-running tasks with feedback (not used here yet)
 ────────────────────────────────────────────────────────────────────────────────
+
+TOPICS USED (matching existing TidyBot2 stack conventions):
+  - /right_arm/cmd      (tidybot_msgs/ArmCommand)  – arm joint position commands
+  - /right_gripper/cmd  (std_msgs/Float64MultiArray) – gripper commands
+  - /joint_states        (sensor_msgs/JointState)    – arm state feedback
+  - /planned_grasp       (geometry_msgs/PoseStamped) – grasp target from planner
+  - /manipulation/task_status (std_msgs/String)      – result status
+
+GRIPPER CONVENTION (same as test_arms_sim.py):
+  0.0 = fully OPEN
+  1.0 = fully CLOSED
 """
 
 import rclpy
@@ -39,8 +50,9 @@ import copy
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String, Float64MultiArray
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from builtin_interfaces.msg import Duration
+
+# ── TidyBot custom message (same as test_arms_sim.py) ───────────────────────
+from tidybot_msgs.msg import ArmCommand
 
 
 # =============================================================================
@@ -50,18 +62,18 @@ from builtin_interfaces.msg import Duration
 # Arm to use (the TidyBot has left and right WX250s arms)
 DEFAULT_ARM = "right"
 
-# Gripper open / close values  (normalized: 1.0 = fully open, 0.0 = closed)
-GRIPPER_OPEN = 1.0
-GRIPPER_CLOSE = 0.0
+# Gripper values (matching test_arms_sim.py convention)
+GRIPPER_OPEN = 0.0    # 0.0 = fully open
+GRIPPER_CLOSE = 1.0   # 1.0 = fully closed
 
 # Vertical offset above the grasp pose where the end-effector moves first
 PREGRASP_Z_OFFSET = 0.08   # 8 cm above the grasp pose
 LIFT_HEIGHT = 0.15          # 15 cm lift after grasping
 
-# Tolerances & timeouts
-JOINT_GOAL_TOLERANCE = 0.05  # rad
-MOVE_TIMEOUT = 8.0           # seconds per motion segment
-MAX_GRASP_RETRIES = 3        # number of ranked grasps to try before giving up
+# Motion timing
+MOVE_DURATION = 2.0         # seconds for arm interpolation (ArmCommand.duration)
+SETTLE_TIME = 0.5           # extra wait after arm move completes
+GRIPPER_WAIT = 1.5          # seconds to wait for gripper open/close
 
 # ── Joint state indices for the right arm ────────────────────────────────────
 # From /joint_states:
@@ -92,7 +104,7 @@ class ManipulationExecutorNode(Node):
         1. Open gripper
         2. Move to PREGRASP (grasp pose + z offset)
         3. Move to GRASP pose
-        4. Close gripper
+        4. Pause at grasp pose, then close gripper
         5. LIFT (grasp pose + lift height)
         6. (Optional) Move to CARRY pose
         7. Publish status
@@ -121,7 +133,7 @@ class ManipulationExecutorNode(Node):
         # ─── State ──────────────────────────────────────────────────────
         self.current_joint_state: JointState | None = None
         self.is_executing = False           # prevent overlapping executions
-        self._gripper_should_close = False  # track gripper intent during sequence
+        self._gripper_value = GRIPPER_OPEN  # current desired gripper state
 
         # ================================================================
         #  SUBSCRIBERS
@@ -163,16 +175,15 @@ class ManipulationExecutorNode(Node):
         #  PUBLISHERS
         # ================================================================
 
-        # Arm joint-position command (Float64MultiArray – consumed by
-        # arm_wrapper_node / arm_controller_node via mujoco_bridge)
-        self.arm_joint_pub = self.create_publisher(
-            Float64MultiArray,
-            f"/{self.arm_name}_arm/joint_cmd",
+        # Arm command (ArmCommand with joint_positions + duration,
+        # same as test_arms_sim.py uses)
+        self.arm_cmd_pub = self.create_publisher(
+            ArmCommand,
+            f"/{self.arm_name}_arm/cmd",
             10,
         )
 
-        # Gripper command (normalized 0–1, consumed by gripper_wrapper_node
-        # via mujoco_bridge:  0.0 = closed, 1.0 = fully open)
+        # Gripper command (Float64MultiArray, 0.0=open, 1.0=closed)
         self.gripper_pub = self.create_publisher(
             Float64MultiArray,
             f"/{self.arm_name}_gripper/cmd",
@@ -187,12 +198,16 @@ class ManipulationExecutorNode(Node):
         )
 
         # ================================================================
+        #  50 Hz CONTROL LOOP – continuously re-asserts gripper state
+        # ================================================================
+        # This is critical: without continuous gripper publishing, the
+        # gripper drifts when arm commands are sent.  This matches the
+        # pattern used in test_arms_sim.py.
+        self.control_timer = self.create_timer(0.02, self._control_loop)
+
+        # ================================================================
         #  SERVICE CLIENTS  (to the existing motion-planner node)
         # ================================================================
-        #
-        # motion_planner_node.py (sim) or motion_planner_real_node.py (real)
-        # exposes a service that takes a target Pose and returns the IK
-        # joint solution + optionally executes it.
         #
         # Uncomment once custom_srvs/PlanToPose is available:
         # ----------------------------------------------------------------
@@ -208,12 +223,25 @@ class ManipulationExecutorNode(Node):
         #  (OPTIONAL) TIMER – publish hardcoded pose once for sim testing
         # ================================================================
         if self.use_hardcoded:
-            # Fire once after 3 seconds to give other nodes time to start
             self.startup_timer = self.create_timer(
                 3.0, self._publish_hardcoded_pose, callback_group=self.cb_group
             )
 
         self.get_logger().info("ManipulationExecutor ready – waiting for grasp poses …")
+
+    # =====================================================================
+    #  50 Hz CONTROL LOOP
+    # =====================================================================
+
+    def _control_loop(self):
+        """
+        Continuously publish the desired gripper state at 50 Hz.
+        This prevents the gripper from drifting when arm commands are sent.
+        Same pattern as test_arms_sim.py.
+        """
+        msg = Float64MultiArray()
+        msg.data = [float(self._gripper_value)]
+        self.gripper_pub.publish(msg)
 
     # =====================================================================
     #  HARDCODED SIMULATION POSE
@@ -229,7 +257,6 @@ class ManipulationExecutorNode(Node):
         #  Replace / remove once the real grasp_planner_node.py exists.    #
         ####################################################################
         """
-        # Cancel the timer so this only fires once
         self.startup_timer.cancel()
 
         ####################################################################
@@ -241,13 +268,10 @@ class ManipulationExecutorNode(Node):
         hardcoded.header.stamp = self.get_clock().now().to_msg()
         hardcoded.header.frame_id = "base_link"
 
-        # Position (meters, in base_link frame)
-        hardcoded.pose.position.x = 0.30              # 30 cm forward
-        hardcoded.pose.position.y = -0.15             # 15 cm to the right
-        hardcoded.pose.position.z = 0.10              # 10 cm above table
+        hardcoded.pose.position.x = 0.30
+        hardcoded.pose.position.y = -0.15
+        hardcoded.pose.position.z = 0.10
 
-        # Orientation – top-down grasp  (180° rotation about the X-axis)
-        # Quaternion for Rx(pi):  (w=0, x=1, y=0, z=0)
         hardcoded.pose.orientation.w = 0.0
         hardcoded.pose.orientation.x = 1.0
         hardcoded.pose.orientation.y = 0.0
@@ -259,8 +283,6 @@ class ManipulationExecutorNode(Node):
         self.get_logger().info(
             "Publishing HARDCODED grasp pose for simulation testing …"
         )
-
-        # Feed it into the same callback the real planner would trigger
         self._grasp_pose_cb(hardcoded)
 
     # =====================================================================
@@ -276,12 +298,9 @@ class ManipulationExecutorNode(Node):
         ────────────────────────────────────────────────────────────────
         THIS IS THE MAIN ENTRY POINT FOR EXECUTION.
 
-        When the grasp-planning node (grasp_planner_node.py) publishes a
-        PoseStamped on /planned_grasp, this callback fires and we run
-        the full pick sequence.
-
-        For now (simulation), the hardcoded timer above publishes one
-        pose into this same callback.
+        When the grasp-planning node publishes a PoseStamped on
+        /planned_grasp, this callback fires and we run the full
+        pick sequence.
 
         When the real grasp planner is ready:
           1. Set the parameter  use_hardcoded_pose := False
@@ -303,10 +322,8 @@ class ManipulationExecutorNode(Node):
             f"{grasp_pose.position.z:.3f})"
         )
 
-        # Run the pick sequence
         reason = self._execute_pick_sequence(grasp_pose)
 
-        # Publish result
         status_msg = String()
         status_msg.data = reason
         self.status_pub.publish(status_msg)
@@ -322,20 +339,17 @@ class ManipulationExecutorNode(Node):
         """
         Full pick-up sequence:
             1. Open gripper
-            2. Move to pre-grasp  (keep gripper open)
-            3. Move to grasp pose (keep gripper open)
-            4. Pause, then close gripper and wait for it to finish
-            5. Lift
+            2. Move to pre-grasp  (gripper stays open via 50Hz loop)
+            3. Move to grasp pose (gripper stays open via 50Hz loop)
+            4. Pause at grasp pose, then close gripper
+            5. Lift with gripper closed
         Returns a reason code string.
         """
 
-        # Reset gripper intent flag
-        self._gripper_should_close = False
-
         # ── Step 1: Open gripper ────────────────────────────────────────
         self.get_logger().info("Step 1/5 – Opening gripper …")
-        self._command_gripper(GRIPPER_OPEN)
-        time.sleep(1.5)  # wait for gripper to fully open
+        self._gripper_value = GRIPPER_OPEN  # 50Hz loop will publish this
+        time.sleep(GRIPPER_WAIT)
 
         # ── Step 2: Move to pre-grasp ──────────────────────────────────
         pregrasp_pose = copy.deepcopy(grasp_pose)
@@ -357,40 +371,10 @@ class ManipulationExecutorNode(Node):
             return REASON_EXEC_FAIL
 
         # ── Step 4: Pause at grasp pose, then close gripper ────────────
-        self.get_logger().info("Step 4/5 – Pausing at grasp pose (1s settle) …")
-        # Keep re-asserting gripper OPEN while we settle at grasp pose
-        for _ in range(10):
-            self._command_gripper(GRIPPER_OPEN)
-            time.sleep(0.1)
-
-        self.get_logger().info("Step 4/5 – Closing gripper …")
-        self._gripper_should_close = True
-        self._command_gripper(GRIPPER_CLOSE)
-
-        # Wait for gripper to fully close (poll finger joint positions)
-        # right_left_finger = index 8, right_right_finger = index 9
-        GRIPPER_CLOSED_THRESHOLD = 0.01
-        GRIPPER_CLOSE_TIMEOUT = 3.0
-        start = time.time()
-        gripper_confirmed = False
-        while (time.time() - start) < GRIPPER_CLOSE_TIMEOUT:
-            self._command_gripper(GRIPPER_CLOSE)  # keep asserting close
-            if self.current_joint_state is not None:
-                left_finger = self.current_joint_state.position[8]
-                right_finger = self.current_joint_state.position[9]
-                if left_finger < GRIPPER_CLOSED_THRESHOLD and right_finger < GRIPPER_CLOSED_THRESHOLD:
-                    self.get_logger().info(
-                        f"  Gripper fully closed "
-                        f"(fingers: {left_finger:.4f}, {right_finger:.4f})"
-                    )
-                    gripper_confirmed = True
-                    break
-            time.sleep(0.1)
-
-        if not gripper_confirmed:
-            self.get_logger().warn("  Gripper close timed out – proceeding anyway")
-
-        time.sleep(0.5)  # extra settle time after close
+        self.get_logger().info("Step 4/5 – Settled at grasp pose. Closing gripper …")
+        self._gripper_value = GRIPPER_CLOSE  # 50Hz loop now publishes CLOSE
+        time.sleep(GRIPPER_WAIT)
+        self.get_logger().info("  Gripper closed.")
 
         # ── Step 5: Lift ───────────────────────────────────────────────
         lift_pose = copy.deepcopy(grasp_pose)
@@ -413,7 +397,7 @@ class ManipulationExecutorNode(Node):
 
     def _move_to_pose(self, target_pose: Pose) -> bool:
         """
-        Send a Cartesian target to the motion planner and wait for execution.
+        Send a Cartesian target to the arm and wait for execution.
 
         ────────────────────────────────────────────────────────────────────
         INTEGRATION POINT:
@@ -443,18 +427,17 @@ class ManipulationExecutorNode(Node):
         # request.arm_name = self.arm_name
         #
         # future = self.plan_to_pose_client.call_async(request)
-        # rclpy.spin_until_future_complete(self, future, timeout_sec=MOVE_TIMEOUT)
+        # rclpy.spin_until_future_complete(self, future, timeout_sec=MOVE_DURATION + 2.0)
         #
         # if future.result() is None:
         #     return False
-        # response = future.result()
-        # return response.success
+        # return future.result().success
         # ─────────────────────────────────────────────────────────────────
 
         # ─────────────────────────────────────────────────────────────────
-        #  OPTION B  (CURRENT PLACEHOLDER) – Publish a joint command
-        #  directly.  Uses rough stand-in joint angles; the real pipeline
-        #  should go through the motion-planner IK solver.
+        #  OPTION B  (CURRENT PLACEHOLDER) – Send ArmCommand directly
+        #  using hardcoded joint angles.  Replace with motion-planner
+        #  service call above once available.
         # ─────────────────────────────────────────────────────────────────
 
         ####################################################################
@@ -464,10 +447,12 @@ class ManipulationExecutorNode(Node):
         #  a top-down reach at roughly (0.30, -0.15, z) in front of the    #
         #  right arm.  They are NOT real IK solutions — replace with the   #
         #  motion-planner service call above once available.                #
+        #                                                                   #
+        #  Joint order: [waist, shoulder, elbow, forearm_roll,              #
+        #                wrist_angle, wrist_rotate]                         #
         ####################################################################
         z = target_pose.position.z
 
-        # Very rough joint-angle lookup based on Z height
         if z > 0.20:
             # High / lifted pose
             joint_targets = [0.0, -0.5, 0.3, 0.0, -0.8, 0.0]
@@ -481,59 +466,38 @@ class ManipulationExecutorNode(Node):
         #  END HARDCODED JOINT TARGETS                                     #
         ####################################################################
 
-        # Publish joint command
-        cmd = Float64MultiArray()
-        cmd.data = joint_targets
-        self.arm_joint_pub.publish(cmd)
+        # Send arm command using ArmCommand message (same as test_arms_sim.py)
+        cmd = ArmCommand()
+        cmd.joint_positions = joint_targets
+        cmd.duration = MOVE_DURATION
+        self.arm_cmd_pub.publish(cmd)
+
         self.get_logger().info(
-            f"  Published joint cmd: {[f'{j:.2f}' for j in joint_targets]}"
+            f"  Published ArmCommand: {[f'{j:.2f}' for j in joint_targets]} "
+            f"duration={MOVE_DURATION}s"
         )
 
-        # Re-assert gripper state during arm motion so the gripper
-        # doesn't drift or get overridden by the arm command
-        if self._gripper_should_close:
-            self._command_gripper(GRIPPER_CLOSE)
-        else:
-            self._command_gripper(GRIPPER_OPEN)
-
-        # Wait for the arm to reach the target
-        return self._wait_for_joint_target(joint_targets, timeout=MOVE_TIMEOUT)
-
-    def _wait_for_joint_target(
-        self, target: list, timeout: float = MOVE_TIMEOUT
-    ) -> bool:
-        """
-        TEMPORARY: Sleep for a fixed duration while the arm moves,
-        continuously re-asserting the gripper state.
-
-        TODO: Replace with proper joint-state monitoring once the motion
-        planner is integrated. The real version should poll /joint_states
-        and compare indices [2:8] against the target until the error is
-        below JOINT_GOAL_TOLERANCE.
-        """
-        for _ in range(30):  # 30 * 0.1s = 3 seconds
-            if self._gripper_should_close:
-                self._command_gripper(GRIPPER_CLOSE)
-            else:
-                self._command_gripper(GRIPPER_OPEN)
-            time.sleep(0.1)
-
-        self.get_logger().info("  (waited 3s – joint check bypassed)")
+        # Wait for arm to finish moving (duration + settle time)
+        # The 50Hz control loop keeps publishing gripper state during this wait
+        time.sleep(MOVE_DURATION + SETTLE_TIME)
+        self.get_logger().info("  Arm move complete.")
         return True
 
     # =====================================================================
-    #  GRIPPER HELPER
+    #  GRIPPER HELPER (for logging / manual calls)
     # =====================================================================
 
-    def _command_gripper(self, value: float):
+    def _set_gripper(self, value: float):
         """
-        Publish a normalized gripper command.
-        0.0 = fully closed, 1.0 = fully open.
-        The gripper_wrapper_node translates this to real PWM if on hardware.
+        Set the desired gripper state. The 50Hz control loop will
+        continuously publish this value.
+        0.0 = fully open, 1.0 = fully closed.
         """
-        msg = Float64MultiArray()
-        msg.data = [float(value)]
-        self.gripper_pub.publish(msg)
+        self._gripper_value = value
+        self.get_logger().info(
+            f"  Gripper target: {'OPEN' if value == GRIPPER_OPEN else 'CLOSED'} "
+            f"({value:.1f})"
+        )
 
 
 # =============================================================================
@@ -546,7 +510,8 @@ def main(args=None):
     node = ManipulationExecutorNode()
 
     # Use a multi-threaded executor so that the blocking pick sequence
-    # doesn't prevent joint_state callbacks from being delivered.
+    # doesn't prevent the 50Hz control loop and joint_state callbacks
+    # from being delivered.
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
 
