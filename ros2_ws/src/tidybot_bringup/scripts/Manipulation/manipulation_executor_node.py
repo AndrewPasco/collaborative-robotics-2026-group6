@@ -346,15 +346,15 @@ class ManipulationExecutorNode(Node):
             if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
               f"  Griper closed :{self._grippper_is_closed()}'"  
               fingers = self._get_finger_positions()
-                if elapsed > GRIPPER_TIMEOUT:
-                    self.get_logger().warn(
-                        f"  Gripper close timed out (fingers: {fingers}) – proceeding"
-                    )
-                else:
-                    self.get_logger().info(
-                        f"  Gripper confirmed closed (fingers: {fingers})."
-                    )
-                self._advance("MOVE_LIFT")
+              if elapsed > GRIPPER_TIMEOUT:
+                  self.get_logger().warn(
+                      f"  Gripper close timed out (fingers: {fingers}) – proceeding"
+                  )
+              else:
+                  self.get_logger().info(
+                      f"  Gripper confirmed closed (fingers: {fingers})."
+                  )
+              self._advance("MOVE_LIFT")
 
         # =================================================================
         #  STATE: MOVE_LIFT
