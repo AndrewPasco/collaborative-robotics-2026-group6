@@ -75,11 +75,11 @@ MOVE_DURATION = 2.0
 ARM_ARRIVAL_TOLERANCE = 0.15     # rad – how close joints must be to target
 GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
 GRIPPER_CLOSED_THRESHOLD = 0.04 # finger position below this = fully closed
-PAUSE_AT_GRASP_SECS = 1.5       # seconds to hold still at grasp before closing
+PAUSE_AT_GRASP_SECS = 20      # seconds to hold still at grasp before closing
 
 # Safety timeouts (fallback if joints never converge)
 ARM_MOVE_TIMEOUT = 8.0
-GRIPPER_TIMEOUT = 5.0
+GRIPPER_TIMEOUT = 10000.0
 
 # ── Joint state indices ──────────────────────────────────────────────────────
 # [0] camera_pan  [1] camera_tilt
@@ -344,7 +344,8 @@ class ManipulationExecutorNode(Node):
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
             if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
-                fingers = self._get_finger_positions()
+              f"  Griper closed :{self._grippper_is_closed()}'"  
+              fingers = self._get_finger_positions()
                 if elapsed > GRIPPER_TIMEOUT:
                     self.get_logger().warn(
                         f"  Gripper close timed out (fingers: {fingers}) – proceeding"
