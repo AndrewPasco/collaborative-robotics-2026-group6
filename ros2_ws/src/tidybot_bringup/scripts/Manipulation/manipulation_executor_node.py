@@ -529,8 +529,8 @@ class ManipulationExecutorNode(Node):
       request = PlanToTarget.Request()
       request.arm_name = self.arm_name
       request.target_pose = target_pose
-      request.use_orientation = True      # Use full 6-DOF IK
-      # request.use_orientation = False
+      #request.use_orientation = True      # Use full 6-DOF IK
+      request.use_orientation = False
       # request.execute = False             # Plan only, don't execute
       request.execute = True
       request.duration = MOVE_DURATION
