@@ -345,7 +345,8 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
-            if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
+            # if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
+            if self._gripper_is_closed():
               f"  Griper closed :{self._gripper_is_closed()}'"  
               fingers = self._get_finger_positions()
               if elapsed > GRIPPER_TIMEOUT:
@@ -379,6 +380,9 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         elif self.state == "DONE":
             self.gripper_value = GRIPPER_CLOSE
+            fingers = self._get_finger_positions()
+            left, right = fingers
+            f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
             if not self.arm_cmd_sent:
                 status_msg = String()
                 status_msg.data = REASON_SUCCESS
