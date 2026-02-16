@@ -74,8 +74,8 @@ MOVE_DURATION = 2.0
 # ── Joint state feedback thresholds ──────────────────────────────────────────
 ARM_ARRIVAL_TOLERANCE = 0.15     # rad – how close joints must be to target
 GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
-GRIPPER_CLOSED_THRESHOLD = 0.04 # finger position below this = fully closed
-PAUSE_AT_GRASP_SECS = 20      # seconds to hold still at grasp before closing
+GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
+PAUSE_AT_GRASP_SECS = 10      # seconds to hold still at grasp before closing
 
 # Safety timeouts (fallback if joints never converge)
 ARM_MOVE_TIMEOUT = 8.0
