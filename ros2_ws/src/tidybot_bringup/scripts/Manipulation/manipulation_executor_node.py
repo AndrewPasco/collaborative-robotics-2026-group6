@@ -733,10 +733,10 @@ class ManipulationExecutorNode(Node):
         hardcoded.pose.position.y = -0.35
         hardcoded.pose.position.z = 0.55
 
-        hardcoded.pose.orientation.w = 0.5
-        hardcoded.pose.orientation.x = 0.5
-        hardcoded.pose.orientation.y = 0.5
-        hardcoded.pose.orientation.z = -0.5
+        hardcoded.pose.orientation.w = 1.0
+        hardcoded.pose.orientation.x = 0.0
+        hardcoded.pose.orientation.y = 0.0
+        hardcoded.pose.orientation.z = 0.0
         ####################################################################
         #  END HARDCODED VALUES                                            #
         ####################################################################
