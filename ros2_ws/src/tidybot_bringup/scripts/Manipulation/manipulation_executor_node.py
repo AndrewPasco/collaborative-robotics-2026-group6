@@ -344,7 +344,7 @@ class ManipulationExecutorNode(Node):
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
             if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
-              f"  Griper closed :{self._grippper_is_closed()}'"  
+              f"  Griper closed :{self._gripper_is_closed()}'"  
               fingers = self._get_finger_positions()
               if elapsed > GRIPPER_TIMEOUT:
                   self.get_logger().warn(
