@@ -288,11 +288,13 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         if self.state == "OPEN_GRIPPER":
             self.gripper_value = GRIPPER_OPEN
-            if self._gripper_is_open() or elapsed > GRIPPER_TIMEOUT:
-                if elapsed > GRIPPER_TIMEOUT:
-                    self.get_logger().warn("  Gripper open timed out – proceeding")
-                else:
-                    self.get_logger().info("  Gripper confirmed open.")
+            # if self._gripper_is_open() or elapsed > GRIPPER_TIMEOUT:
+            if self._gripper_is_open():
+                # if elapsed > GRIPPER_TIMEOUT:
+                #     self.get_logger().warn("  Gripper open timed out – proceeding")
+                # else:
+                #     self.get_logger().info("  Gripper confirmed open.")
+                self.get_logger().info("  Gripper confirmed open.")
                 self._advance("MOVE_PREGRASP")
 
         # =================================================================
@@ -349,12 +351,15 @@ class ManipulationExecutorNode(Node):
             if self._gripper_is_closed():
               f"  Griper closed :{self._gripper_is_closed()}'"  
               fingers = self._get_finger_positions()
-              if elapsed > GRIPPER_TIMEOUT:
-                  self.get_logger().warn(
-                      f"  Gripper close timed out (fingers: {fingers}) – proceeding"
-                  )
-              else:
-                  self.get_logger().info(
+              # if elapsed > GRIPPER_TIMEOUT:
+              #     self.get_logger().warn(
+              #         f"  Gripper close timed out (fingers: {fingers}) – proceeding"
+              #     )
+              # else:
+              #     self.get_logger().info(
+              #         f"  Gripper confirmed closed (fingers: {fingers})."
+              #     )
+              self.get_logger().info(
                       f"  Gripper confirmed closed (fingers: {fingers})."
                   )
               self._advance("MOVE_LIFT")
@@ -379,10 +384,14 @@ class ManipulationExecutorNode(Node):
         #  STATE: DONE
         # =================================================================
         elif self.state == "DONE":
-            #self.gripper_value = GRIPPER_CLOSE
+            # #self.gripper_value = GRIPPER_CLOSE
+            # fingers = self._get_finger_positions()
+            # left, right = fingers
+            # f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
             fingers = self._get_finger_positions()
-            left, right = fingers
-            f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
+            self.get_logger().info(
+                    f"  Gripper confirmed closed (fingers: {fingers})."
+                )
             if not self.arm_cmd_sent:
                 status_msg = String()
                 status_msg.data = REASON_SUCCESS
