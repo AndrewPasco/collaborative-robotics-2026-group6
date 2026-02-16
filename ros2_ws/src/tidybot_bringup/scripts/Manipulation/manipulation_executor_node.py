@@ -238,7 +238,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
-        f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
+        self.get_logger().info(f"  gripper is CLOSED cmd func: left: {left}, right: {right} …")
         return left < GRIPPER_CLOSED_THRESHOLD and right < GRIPPER_CLOSED_THRESHOLD
 
     def _gripper_is_open(self):
@@ -247,7 +247,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
-        f"  gripper is OPEN cmd func: left: {left}, right: {right} …"
+        self.get_logger().info(f"  gripper is OPEN cmd func: left: {left}, right: {right} …")
         return left > GRIPPER_OPEN_THRESHOLD and right > GRIPPER_OPEN_THRESHOLD
 
     # =====================================================================
@@ -347,9 +347,10 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
+            self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
             # if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
             if self._gripper_is_closed():
-              f"  Griper closed :{self._gripper_is_closed()}'"  
+              self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
               fingers = self._get_finger_positions()
               # if elapsed > GRIPPER_TIMEOUT:
               #     self.get_logger().warn(
@@ -369,7 +370,7 @@ class ManipulationExecutorNode(Node):
         #  Send arm command once, then wait for joints to arrive
         # =================================================================
         elif self.state == "MOVE_LIFT":
-            #self.gripper_value = GRIPPER_CLOSE
+            self.gripper_value = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
                 self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
                 self.arm_cmd_sent = True
