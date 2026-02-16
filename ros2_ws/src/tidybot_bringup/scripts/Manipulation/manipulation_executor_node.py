@@ -457,6 +457,14 @@ class ManipulationExecutorNode(Node):
     #  ARM COMMAND
     # =====================================================================
 
+    # def _send_arm_to_pose(self, grasp_pose: Pose, z_offset: float = 0.0):
+    #   """
+    #   Compute joint targets and send ArmCommand.
+    #   Uses motion planner service if available, otherwise hardcoded IK.
+    #   """
+    #   # Adjust target pose with z_offset
+    #   target_pose = copy.deepcopy(grasp_pose)
+    #   target_pose.position.z += z_offset
     def _send_arm_to_pose(self, grasp_pose: Pose, z_offset: float = 0.0):
       """
       Compute joint targets and send ArmCommand.
@@ -465,6 +473,42 @@ class ManipulationExecutorNode(Node):
       # Adjust target pose with z_offset
       target_pose = copy.deepcopy(grasp_pose)
       target_pose.position.z += z_offset
+      
+      # ──────────────────────────────────────────────────────────────
+      # USE MOTION PLANNER SERVICE
+      # ──────────────────────────────────────────────────────────────
+      if self.use_planner:
+          joint_targets = self._call_planner_service(target_pose)
+          
+          if joint_targets is None:
+              # IK failed - abort sequence
+              self.get_logger().error(
+                  f"IK failed for pose at z={target_pose.position.z:.3f}. "
+                  "Aborting grasp sequence."
+              )
+              self._publish_status(REASON_IK_FAIL)
+              self._advance("DONE")
+              return
+      else:
+          # Fallback: Hardcoded IK
+          self.get_logger().warn("Using hardcoded IK (planner unavailable)")
+          joint_targets = self._hardcoded_ik(target_pose)
+      
+      # ──────────────────────────────────────────────────────────────
+      # PUBLISH ARM COMMAND
+      # ──────────────────────────────────────────────────────────────
+      self.current_arm_target = joint_targets
+      self.arm_cmd_sent_time = time.time()
+      
+      cmd = ArmCommand()
+      cmd.joint_positions = joint_targets
+      cmd.duration = MOVE_DURATION
+      self.arm_cmd_pub.publish(cmd)
+      
+      self.get_logger().info(
+          f"  ArmCommand: {[f'{j:.2f}' for j in joint_targets]}  "
+          f"duration={MOVE_DURATION}s  (z={target_pose.position.z:.3f})"
+      )
 
 
     def _call_planner_service(self, target_pose: Pose):
