@@ -238,6 +238,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
+        f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
         return left < GRIPPER_CLOSED_THRESHOLD and right < GRIPPER_CLOSED_THRESHOLD
 
     def _gripper_is_open(self):
@@ -246,6 +247,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
+        f"  gripper is OPEN cmd func: left: {left}, right: {right} …"
         return left > GRIPPER_OPEN_THRESHOLD and right > GRIPPER_OPEN_THRESHOLD
 
     # =====================================================================
