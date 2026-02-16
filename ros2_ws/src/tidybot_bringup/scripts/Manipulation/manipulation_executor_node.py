@@ -78,7 +78,7 @@ GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
 PAUSE_AT_GRASP_SECS = 10      # seconds to hold still at grasp before closing
 
 # Safety timeouts (fallback if joints never converge)
-ARM_MOVE_TIMEOUT = 8.0
+ARM_MOVE_TIMEOUT = 10000.0
 GRIPPER_TIMEOUT = 10000.0
 
 # ── Joint state indices ──────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
-        self.get_logger().info(f"  gripper is CLOSED cmd func: left: {left}, right: {right} …")
+        # self.get_logger().info(f"  gripper is CLOSED cmd func: left: {left}, right: {right} …")
         return left < GRIPPER_CLOSED_THRESHOLD and right < GRIPPER_CLOSED_THRESHOLD
 
     def _gripper_is_open(self):
@@ -247,7 +247,7 @@ class ManipulationExecutorNode(Node):
         if fingers is None:
             return False
         left, right = fingers
-        self.get_logger().info(f"  gripper is OPEN cmd func: left: {left}, right: {right} …")
+        # self.get_logger().info(f"  gripper is OPEN cmd func: left: {left}, right: {right} …")
         return left > GRIPPER_OPEN_THRESHOLD and right > GRIPPER_OPEN_THRESHOLD
 
     # =====================================================================
@@ -347,11 +347,11 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
-            self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
+            # self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
             # if self._gripper_is_closed() or elapsed > GRIPPER_TIMEOUT:
             if self._gripper_is_closed():
-              self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
-              fingers = self._get_finger_positions()
+              # self.get_logger().info(f"  Gripper closed :{self._gripper_is_closed()}'")
+              # fingers = self._get_finger_positions()
               # if elapsed > GRIPPER_TIMEOUT:
               #     self.get_logger().warn(
               #         f"  Gripper close timed out (fingers: {fingers}) – proceeding"
@@ -390,9 +390,9 @@ class ManipulationExecutorNode(Node):
             # left, right = fingers
             # f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
             fingers = self._get_finger_positions()
-            self.get_logger().info(
-                    f"  Gripper confirmed closed (fingers: {fingers})."
-                )
+            # self.get_logger().info(
+            #         f"  Gripper confirmed closed (fingers: {fingers})."
+            #     )
             if not self.arm_cmd_sent:
                 status_msg = String()
                 status_msg.data = REASON_SUCCESS
