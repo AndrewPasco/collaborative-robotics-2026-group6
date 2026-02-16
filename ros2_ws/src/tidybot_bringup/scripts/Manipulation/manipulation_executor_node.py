@@ -33,8 +33,8 @@ TOPICS USED (matching existing TidyBot2 stack conventions):
   - /manipulation/task_status (std_msgs/String)       – result status
 
 GRIPPER CONVENTION (same as test_arms_sim.py):
-  0.0 = fully OPEN
-  1.0 = fully CLOSED
+  1.0 = fully OPEN
+  0.0 = fully CLOSED
 
 ARCHITECTURE:
   This node uses a STATE MACHINE inside a 50 Hz timer callback (same pattern
@@ -78,8 +78,8 @@ from tidybot_msgs.msg import ArmCommand
 DEFAULT_ARM = "right"
 
 # Gripper values (matching test_arms_sim.py)
-GRIPPER_OPEN = 0.0    # 0.0 = fully open
-GRIPPER_CLOSE = 1.0   # 1.0 = fully closed
+GRIPPER_OPEN = 1.0    # 0.0 = fully open
+GRIPPER_CLOSE = 0.0   # 1.0 = fully closed
 
 # Vertical offsets
 PREGRASP_Z_OFFSET = 0.08   # 8 cm above the grasp pose
