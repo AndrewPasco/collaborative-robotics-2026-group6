@@ -323,7 +323,8 @@ class ManipulationExecutorNode(Node):
             if not self.arm_cmd_sent:
                 self._send_arm_to_pose(self.grasp_pose, z_offset=0.0)
                 self.arm_cmd_sent = True
-            if self._arm_at_target() #or elapsed > ARM_MOVE_TIMEOUT:
+            # if self._arm_at_target() or elapsed > ARM_MOVE_TIMEOUT:
+            if self._arm_at_target():
             #     if elapsed > ARM_MOVE_TIMEOUT:
             #         self.get_logger().warn("  Grasp move timed out – proceeding")
             #     else:
