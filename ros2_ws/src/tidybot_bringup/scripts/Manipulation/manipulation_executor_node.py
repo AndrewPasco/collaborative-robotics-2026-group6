@@ -52,6 +52,7 @@ from geometry_msgs.msg import PoseStamped, Pose
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String, Float64MultiArray
 from tidybot_msgs.msg import ArmCommand
+from tidybot_msgs.srv import PlanToTarget
 
 
 # =============================================================================
@@ -112,14 +113,17 @@ class ManipulationExecutorNode(Node):
         self.declare_parameter("arm_name", DEFAULT_ARM)
         self.declare_parameter("use_hardcoded_pose", True)
         self.declare_parameter("sim_mode", True)
+        self.declare_parameter("use_motion_planner", True)
 
         self.arm_name = self.get_parameter("arm_name").value
         self.use_hardcoded = self.get_parameter("use_hardcoded_pose").value
         self.sim_mode = self.get_parameter("sim_mode").value
+        self.use_planner = self.get_parameter("use_motion_planner").value
 
         self.get_logger().info(
             f"ManipulationExecutor starting  |  arm={self.arm_name}  "
             f"sim={self.sim_mode}  hardcoded={self.use_hardcoded}"
+            f"planner={self.use_planner}"
         )
 
         # ─── State machine ──────────────────────────────────────────────
@@ -185,7 +189,25 @@ class ManipulationExecutorNode(Node):
         #     PlanToPose, f"/{self.arm_name}_arm/plan_to_pose",
         #     callback_group=self.cb_group,
         # )
+        self.plan_client = self.create_client(
+          PlanToTarget,
+          '/plan_to_target',
+          callback_group=self.cb_group
+        )
 
+        # Wait for planner service (with timeout)
+        if self.use_planner:
+            self.get_logger().info('Waiting for /plan_to_target service...')
+            service_available = self.plan_client.wait_for_service(timeout_sec=5.0)
+            
+            if not service_available:
+                self.get_logger().warn(
+                    'Motion planner service not available! '
+                    'Falling back to hardcoded IK.'
+                )
+                self.use_planner = False
+            else:
+                self.get_logger().info('Motion planner service connected!')
         # ================================================================
         #  50 Hz CONTROL LOOP
         # ================================================================
