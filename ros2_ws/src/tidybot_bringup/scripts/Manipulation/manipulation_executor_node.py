@@ -364,7 +364,7 @@ class ManipulationExecutorNode(Node):
         #  Send arm command once, then wait for joints to arrive
         # =================================================================
         elif self.state == "MOVE_LIFT":
-            self.gripper_value = GRIPPER_CLOSE
+            #self.gripper_value = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
                 self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
                 self.arm_cmd_sent = True
@@ -379,7 +379,7 @@ class ManipulationExecutorNode(Node):
         #  STATE: DONE
         # =================================================================
         elif self.state == "DONE":
-            self.gripper_value = GRIPPER_CLOSE
+            #self.gripper_value = GRIPPER_CLOSE
             fingers = self._get_finger_positions()
             left, right = fingers
             f"  gripper is CLOSED cmd func: left: {left}, right: {right} …"
