@@ -727,14 +727,14 @@ class ManipulationExecutorNode(Node):
         hardcoded.header.stamp = self.get_clock().now().to_msg()
         hardcoded.header.frame_id = "base_link"
 
-        hardcoded.pose.position.x = 0.30
-        hardcoded.pose.position.y = -0.15
-        hardcoded.pose.position.z = 0.10
+        hardcoded.pose.position.x = -0.10
+        hardcoded.pose.position.y = -0.35
+        hardcoded.pose.position.z = 0.50
 
-        hardcoded.pose.orientation.w = 0.0
-        hardcoded.pose.orientation.x = 1.0
-        hardcoded.pose.orientation.y = 0.0
-        hardcoded.pose.orientation.z = 0.0
+        hardcoded.pose.orientation.w = 0.5
+        hardcoded.pose.orientation.x = 0.5
+        hardcoded.pose.orientation.y = 0.5
+        hardcoded.pose.orientation.z = -0.5
         ####################################################################
         #  END HARDCODED VALUES                                            #
         ####################################################################
