@@ -90,7 +90,7 @@ GRIPPER_OPEN_TIME = 1.5     # how long to hold gripper open before moving
 MOVE_DURATION = 2.0         # arm interpolation time (ArmCommand.duration)
 SETTLE_TIME = 0.5           # pause after arm arrives before next step
 PAUSE_AT_GRASP_TIME = 3.0   # pause at grasp pose before closing gripper
-GRIPPER_CLOSE_TIME = 1\3.5    # how long to wait for gripper to close
+GRIPPER_CLOSE_TIME = 3.0    # how long to wait for gripper to close
 
 # ── Joint state indices for the right arm ────────────────────────────────────
 # From /joint_states:
