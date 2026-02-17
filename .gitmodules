@@ -1,3 +1,16 @@
 [submodule "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/graspnet-baseline"]
 	path = ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/graspnet-baseline
 	url = https://github.com/peasant98/graspnet-baseline
+[submodule "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/gpd"]
+	path = ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/gpd
+	url = https://github.com/atenpas/gpd.git
+[submodule "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/gpd_ros2"]
+	path = ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/gpd_ros2
+	url = https://github.com/rohitmenon86/gpd_ros2.git
+[submodule "ros2_ws/src/gpd_ros2"]
+	path = ros2_ws/src/gpd_ros2
+	url = https://github.com/rohitmenon86/gpd_ros2.git
+[submodule "ros2_ws/src/realsense-ros"]
+	path = ros2_ws/src/realsense-ros
+	url = https://github.com/IntelRealSense/realsense-ros.git
+	branch = ros2-development

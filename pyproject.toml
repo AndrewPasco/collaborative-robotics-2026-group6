@@ -100,6 +100,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["simulation"]
 
+[tool.uv.workspace]
+members = [
+    "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/gpd",
+]
+
 [dependency-groups]
 dev = [
     "ipython>=8.0.0",
