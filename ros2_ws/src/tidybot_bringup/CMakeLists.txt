@@ -37,7 +37,6 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
-  scripts/vision-manipulation/grasp_planner_node.py
   scripts/Manipulation/modular_manipulation_executor_node.py
   scripts/Manipulation/manipulation_executor_node.py
   DESTINATION lib/${PROJECT_NAME}
