@@ -109,7 +109,7 @@ MOVE_DURATION_REAL = 3.0    # slower for real hardware safety
 ARM_ARRIVAL_TOLERANCE = 0.05     # rad – how close joints must be to target
 GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
 GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
-PAUSE_AT_GRASP_SECS = 10        # seconds to hold still at grasp before closing
+PAUSE_AT_GRASP_SECS = 1        # seconds to hold still at grasp before closing
 
 # ── CHANGE 3: Add gripper min wait to prevent false confirmations ────────────
 GRIPPER_MIN_WAIT = 2.0           # min seconds before checking gripper feedback
@@ -481,6 +481,19 @@ class ManipulationExecutorNode(Node):
         #  STATE: DONE
         # =================================================================
         elif self.state == "DONE":
+            # if not self.arm_cmd_sent:
+            #     fingers = self._get_finger_positions()
+            #     self.get_logger().info(f"  Final gripper state (fingers: {fingers}).")
+            #     self._publish_status(REASON_SUCCESS)
+            #     self.get_logger().info(f"Pick sequence complete – result: {REASON_SUCCESS}")
+            #     self.arm_cmd_sent = True
+            # Keep publishing arm command to prevent drift
+            if self.current_arm_target is not None and self.sim_mode:
+                cmd = ArmCommand()
+                cmd.joint_positions = list(self.current_arm_target)
+                cmd.duration = 0.02  # short duration = hold position
+                self.arm_cmd_pub.publish(cmd)
+
             if not self.arm_cmd_sent:
                 fingers = self._get_finger_positions()
                 self.get_logger().info(f"  Final gripper state (fingers: {fingers}).")
