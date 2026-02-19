@@ -1,0 +1,15 @@
+{
+  "min_width": 0.0,
+  "force_limit": 200.0,
+  "max_width": 0.074,
+  "finger_radius": 0.005,
+  "max_depth": 0.025,
+  "finger_width": 0.015,
+  "real_finger_width": 0.015,
+  "hand_height": 0.040,
+  "hand_height_two_finger_side": 0.040,
+  "hand_outer_diameter": 0.11,
+  "hand_depth": 0.060,
+  "real_hand_depth": 0.060,
+  "init_bite": 0.01
+}

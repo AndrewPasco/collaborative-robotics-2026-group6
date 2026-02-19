@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2
-from std_msgs.msg import Bool, Int64
-from gpd_ros2_msgs.srv import DetectConstrainedGrasps
+from std_msgs.msg import Bool
+from gpd_ros2_interfaces.srv import DetectGrasps
+from gpd_ros2_interfaces.msg import CloudIndexed, CloudSources
 from geometry_msgs.msg import Point
 
 
@@ -10,9 +13,15 @@ class GraspTriggerNode(Node):
     def __init__(self):
         super().__init__("grasp_trigger_node")
 
+        # Setup QoS for high-bandwidth point cloud data
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            depth=1
+        )
+
         # 1. Subscribe to the continuous point cloud stream from depth_image_proc, started in gpd_bridge.launch.py (Input Data)
         self.cloud_sub = self.create_subscription(
-            PointCloud2, "/camera/points", self.cloud_callback, 1
+            PointCloud2, "/camera/points", self.cloud_callback, qos_profile
         )
         self.latest_cloud = None
         self.get_logger().info("Waiting for point cloud on /camera/points...")
@@ -25,7 +34,7 @@ class GraspTriggerNode(Node):
 
         # 3. Setup the GPD Service Client
         self.gpd_client = self.create_client(
-            DetectConstrainedGrasps, "detect_constrained_grasps"
+            DetectGrasps, "detect_grasps"
         )
         while not self.gpd_client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("Waiting for GPD service...")
@@ -50,21 +59,67 @@ class GraspTriggerNode(Node):
         self.call_gpd_service()
 
     def call_gpd_service(self):
+        import struct
+        import math
+
         # Prepare Request
-        req = DetectConstrainedGrasps.Request()
-        req.cloud_indexed.cloud_sources.cloud = self.latest_cloud
-
-        # Viewpoint (Camera at 0,0,0 relative to cloud)
-        req.cloud_indexed.cloud_sources.view_points = [Point(x=0.0, y=0.0, z=0.0)]
-
-        # Sample Indices (Every 10th point to speed up detection)
-        # Note: GPD might require indices to be unique and sorted
+        req = DetectGrasps.Request()
+        
+        # 1. Validate Point Cloud
         num_points = self.latest_cloud.width * self.latest_cloud.height
-        indices = [Int64(data=i) for i in range(0, num_points, 10)]
-        req.cloud_indexed.indices = indices
+        if num_points == 0:
+            self.get_logger().error("Point cloud is empty!")
+            return
 
-        # Use Config File Params
-        req.params_policy = DetectConstrainedGrasps.Request.USE_CFG_FILE
+        self.get_logger().info(f"Preparing GPD request with {num_points} points...")
+
+        # 2. Extract valid indices (points that are not NaN and within a small workspace)
+        # Workspace crop for debugging: x[-0.1, 0.1], y[-0.1, 0.1], z[0.2, 0.8]
+        fmt = "f" # float
+        valid_indices = []
+        point_step = self.latest_cloud.point_step
+        
+        for i in range(0, num_points):
+            offset = i * point_step
+            # Read x, y, z coordinates
+            x_bytes = self.latest_cloud.data[offset + 0 : offset + 4]
+            y_bytes = self.latest_cloud.data[offset + 4 : offset + 8]
+            z_bytes = self.latest_cloud.data[offset + 8 : offset + 12]
+            
+            x = struct.unpack(fmt, x_bytes)[0]
+            y = struct.unpack(fmt, y_bytes)[0]
+            z = struct.unpack(fmt, z_bytes)[0]
+            
+            if math.isnan(x) or math.isnan(y) or math.isnan(z):
+                continue
+
+            # Crop box
+            if -0.1 < x < 0.1 and -0.1 < y < 0.1 and 0.3 < z < 0.7:
+                valid_indices.append(i)
+
+        if len(valid_indices) == 0:
+            self.get_logger().warn("No valid points found in the crop box (x[-0.1, 0.1], y[-0.1, 0.1], z[0.3, 0.7])!")
+            return
+
+        # Limit to max 500 samples
+        if len(valid_indices) > 500:
+            stride = len(valid_indices) // 500
+            valid_indices = valid_indices[::stride][:500]
+
+        self.get_logger().info(f"Found {len(valid_indices)} points in crop box. Sending to GPD...")
+
+        # Fill CloudSources
+        sources = CloudSources()
+        sources.cloud = self.latest_cloud
+        sources.view_points = [Point(x=0.0, y=0.0, z=0.0)]
+        sources.camera_source = [0] * num_points
+
+        # Fill CloudIndexed
+        indexed = CloudIndexed()
+        indexed.cloud_sources = sources
+        indexed.indices = valid_indices
+        
+        req.cloud_indexed = indexed
 
         # Async Service Call
         future = self.gpd_client.call_async(req)

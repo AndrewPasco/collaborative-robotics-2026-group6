@@ -1,12 +1,22 @@
 import os
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def generate_launch_description():
+def launch_setup(context, *args, **kwargs):
+    # Resolve use_sim argument
+    use_sim = LaunchConfiguration('use_sim').perform(context).lower() == 'true'
+
+    # Determine depth topic based on environment
+    # Sim: We warped depth to the raw depth topic in the bridge
+    # Real: RealSense driver publishes to aligned_depth_to_color
+    depth_topic = "/camera/depth/image_raw" if use_sim else "/camera/aligned_depth_to_color/image_raw"
+
     # 1. Point Cloud Generator (depth_image_proc)
     # Converts your existing images to the point cloud GPD needs
+    # Consider seeing if we can get PC directly from RS?
     cloud_node = Node(
         package="depth_image_proc",
         executable="point_cloud_xyzrgb_node",
@@ -15,28 +25,27 @@ def generate_launch_description():
         remappings=[
             ("rgb/camera_info", "/camera/color/camera_info"),
             ("rgb/image_rect_color", "/camera/color/image_raw"),
-            ("depth_registered/image_rect", "/camera/depth/image_raw"),
+            ("depth_registered/image_rect", depth_topic),
             ("points", "/camera/points"),  # Output topic
         ],
     )
 
-    # 2. GPD Node
-    # Corrected executable name based on your CMakeLists.txt
-    gpd_config = os.path.join(
-        get_package_share_directory("gpd_ros2"), "config", "ros_eigen_params.cfg"
-    )
-
+    # 2. PointNetGPD Node (Python)
     gpd_node = Node(
-        package="gpd_ros2",
-        executable="gpd_ros2_detect_grasps_server",
-        name="gpd_ros2",
+        package="tidybot_bringup",
+        executable="pointnet_gpd_node.py",
+        name="pointnet_gpd",
         output="screen",
-        parameters=[
-            {"config_file": gpd_config},
-            {"cloud_type": 0},
-            {"auto_mode": True},
-        ],
-        remappings=[("cloud_stitched", "/camera/points")],
     )
 
-    return LaunchDescription([cloud_node, gpd_node])
+    return [cloud_node, gpd_node]
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        DeclareLaunchArgument(
+            'use_sim', default_value='true',
+            description='Whether to use simulation camera topics (True) or real robot topics (False)'
+        ),
+        OpaqueFunction(function=launch_setup)
+    ])

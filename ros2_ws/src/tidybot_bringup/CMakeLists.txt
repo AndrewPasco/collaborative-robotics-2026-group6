@@ -39,6 +39,8 @@ install(PROGRAMS
   scripts/trajectory_tracking.py
   scripts/Manipulation/modular_manipulation_executor_node.py
   scripts/Manipulation/manipulation_executor_node.py
+  scripts/vision-manipulation/grasp_trigger_node.py
+  scripts/vision-manipulation/pointnet_gpd_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

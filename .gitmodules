@@ -5,3 +5,9 @@
 	path = ros2_ws/src/realsense-ros
 	url = https://github.com/IntelRealSense/realsense-ros.git
 	branch = ros2-development
+[submodule "ros2_ws/grasp_detection_ros2"]
+	path = ros2_ws/grasp_detection_ros2
+	url = https://github.com/socrob/grasp_detection_ros2
+[submodule "ros2_ws/src/grasp_detection_ros2"]
+	path = ros2_ws/src/grasp_detection_ros2
+	url = https://github.com/socrob/grasp_detection_ros2

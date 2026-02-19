@@ -15,6 +15,7 @@ import os
 import time
 import threading
 import numpy as np
+import cv2
 
 import rclpy
 from rclpy.node import Node
@@ -215,6 +216,7 @@ class MuJoCoBridgeNode(Node):
         self.rgb_pub = self.create_publisher(Image, '/camera/color/image_raw', qos)
         self.depth_pub = self.create_publisher(Image, '/camera/depth/image_raw', qos)
         self.camera_info_pub = self.create_publisher(CameraInfo, '/camera/color/camera_info', qos)
+        self.depth_info_pub = self.create_publisher(CameraInfo, '/camera/depth/camera_info', qos)
         self.goal_reached_pub = self.create_publisher(Bool, '/base/goal_reached', 10)
 
         # TF broadcaster
@@ -606,6 +608,36 @@ class MuJoCoBridgeNode(Node):
 
             self.tf_broadcaster.sendTransform(t)
 
+    def convert_intrinsics(self, img, K_old, K_new, new_size=(640, 480)):
+        """Convert an image to a different set of camera intrinsics."""
+        width, height = new_size
+        K_new_inv = np.linalg.inv(K_new)
+        
+        # Construct a grid of points representing the new image coordinates
+        x, y = np.meshgrid(np.arange(width), np.arange(height))
+        homogenous_coords = np.stack([x.ravel(), y.ravel(), np.ones_like(x).ravel()], axis=-1).T
+        
+        # Convert to the old image coordinates
+        old_coords = K_old @ K_new_inv @ homogenous_coords
+        old_coords /= old_coords[2, :]  # Normalize to make homogeneous
+        
+        # Reshape for remapping
+        map_x = old_coords[0, :].reshape(height, width).astype(np.float32)
+        map_y = old_coords[1, :].reshape(height, width).astype(np.float32)
+        
+        # Remap the image to the new intrinsics
+        converted_img = cv2.remap(img, map_x, map_y, interpolation=cv2.INTER_LINEAR)
+        return converted_img
+
+    def warp_image(self, image, K, R, t):
+        """Warp an image from the perspective of camera 1 to camera 2."""
+        K_inv = np.linalg.inv(K)
+        H = K @ (R - np.outer(t, K_inv[-1, :])) @ K_inv
+        
+        height, width = image.shape[:2]
+        warped_image = cv2.warpPerspective(image, H, (width, height))
+        return warped_image
+
     def camera_callback(self):
         """Publish camera images."""
         if not HAS_CV_BRIDGE:
@@ -614,20 +646,35 @@ class MuJoCoBridgeNode(Node):
         now = self.get_clock().now().to_msg()
 
         with self.lock:
-            # Render RGB image
+            # 1. Render RGB image
             self.renderer.update_scene(self.data, camera='d435_rgb')
             rgb_image = self.renderer.render()
-            # Flip vertically and horizontally to match ROS camera convention
-            # (MuJoCo camera quaternion causes both vertical and horizontal flip)
             rgb_image = np.fliplr(np.flipud(rgb_image)).copy()
 
-            # Render depth image
+            # 2. Render Depth image (from its own camera)
             self.renderer.update_scene(self.data, camera='d435_depth')
             self.renderer.enable_depth_rendering()
             depth_image = self.renderer.render()
             self.renderer.disable_depth_rendering()
-            # Flip vertically and horizontally to match ROS camera convention
             depth_image = np.fliplr(np.flipud(depth_image)).copy()
+
+            # 3. Align Depth to RGB
+            # Intrinsics for d435_rgb (42 deg FOV)
+            f_rgb = 480 / (2 * np.tan(np.radians(42) / 2))
+            K_rgb = np.array([[f_rgb, 0, 320], [0, f_rgb, 240], [0, 0, 1]])
+            
+            # Intrinsics for d435_depth (57 deg FOV)
+            f_depth = 480 / (2 * np.tan(np.radians(57) / 2))
+            K_depth = np.array([[f_depth, 0, 320], [0, f_depth, 240], [0, 0, 1]])
+
+            # Step A: Convert depth intrinsics to RGB intrinsics (Resize/Rescale FOV)
+            depth_aligned = self.convert_intrinsics(depth_image, K_depth, K_rgb)
+            
+            # Step B: Warp depth to RGB viewpoint (MuJoCo cameras are at same pos/quat, so R=I, t=0)
+            # In real robot, t would be the baseline.
+            R = np.eye(3)
+            t = np.zeros(3)
+            depth_aligned = self.warp_image(depth_aligned, K_rgb, R, t)
 
         # Publish RGB image
         try:
@@ -640,11 +687,11 @@ class MuJoCoBridgeNode(Node):
 
         # Publish depth image
         try:
-            # Convert to 16-bit depth in mm
-            depth_mm = (depth_image * 1000).astype(np.uint16)
+            depth_mm = (depth_aligned * 1000).astype(np.uint16)
             depth_msg = self.cv_bridge.cv2_to_imgmsg(depth_mm, encoding='16UC1')
             depth_msg.header.stamp = now
-            depth_msg.header.frame_id = 'camera_depth_optical_frame'
+            # Use same frame as RGB since depth is registered to it
+            depth_msg.header.frame_id = 'camera_color_optical_frame'
             self.depth_pub.publish(depth_msg)
         except Exception as e:
             self.get_logger().warn(f'Failed to publish depth image: {e}')
@@ -655,14 +702,12 @@ class MuJoCoBridgeNode(Node):
         camera_info.header.frame_id = 'camera_color_optical_frame'
         camera_info.width = 640
         camera_info.height = 480
-        # Approximate D435 intrinsics (fovy=42 degrees)
-        fy = 480 / (2 * np.tan(np.radians(42) / 2))
-        fx = fy  # Square pixels
-        camera_info.k = [fx, 0.0, 320.0, 0.0, fy, 240.0, 0.0, 0.0, 1.0]
+        camera_info.k = K_rgb.flatten().tolist()
         camera_info.d = [0.0, 0.0, 0.0, 0.0, 0.0]
         camera_info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-        camera_info.p = [fx, 0.0, 320.0, 0.0, 0.0, fy, 240.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+        camera_info.p = [f_rgb, 0.0, 320.0, 0.0, 0.0, f_rgb, 240.0, 0.0, 0.0, 0.0, 1.0, 0.0]
         self.camera_info_pub.publish(camera_info)
+        self.depth_info_pub.publish(camera_info)
 
     def destroy_node(self):
         """Clean up resources."""
