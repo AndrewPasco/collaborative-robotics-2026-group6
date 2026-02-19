@@ -51,7 +51,7 @@
   </worldbody>
 
   <keyframe>
-    <key name="init" qpos="1.5 0.0 0.02 1 0 0 0"/>
+    <key name="init" qpos="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0.0 0.02 1 0 0 0"/>
   </keyframe>
 
   <!-- <worldbody>
