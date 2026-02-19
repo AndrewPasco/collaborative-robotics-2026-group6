@@ -43,12 +43,16 @@
     </body>
 
     <!-- ADDED: Banana to the right of the block -->
-    <body name="banana" pos="0.5 -0.3 0.02">
+    <body name="banana" pos="1.5 0.0 0.02">
       <freejoint name="banana_joint"/>
       <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
         mass="0.12" friction="7 7 0.5"/>
     </body>
   </worldbody>
+
+  <keyframe>
+    <key name="init" qpos="1.5 0.0 0.02 1 0 0 0"/>
+  </keyframe>
 
   <!-- <worldbody>
     <light pos="0 0 1.5" directional="true"/>
