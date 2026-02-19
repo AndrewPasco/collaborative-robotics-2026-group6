@@ -43,7 +43,7 @@
     </body>
 
     <!-- ADDED: Banana to the right of the block -->
-    <body name="banana" pos="0.55 -0.2 0.05">
+    <body name="banana" pos="0.5 -0.3 0.02">
       <freejoint name="banana_joint"/>
       <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
         mass="0.12" friction="7 7 0.5"/>
