@@ -16,10 +16,10 @@
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
     <material name="block_material" rgba="0.8 0.2 0.2 1"/>
 
-    <!-- ADDED: Banana mesh and texture
+    <!-- ADDED: Banana mesh and texture -->
     <mesh name="banana_mesh" file="meshes/011_banana/textured.obj" scale="1 1 1"/>
     <texture name="banana_tex" type="2d" file="meshes/011_banana/texture_map.png"/>
-    <material name="banana_mat" texture="banana_tex"/> -->
+    <material name="banana_mat" texture="banana_tex"/>
   </asset>
 
 <!-- 
@@ -42,12 +42,12 @@
         friction="1.0 0.5 0.5" solref="0.01 1" solimp="5 5 0.001"/>
     </body>
 
-    <!-- ADDED: Banana to the right of the block
+    <!-- ADDED: Banana to the right of the block -->
     <body name="banana" pos="0.55 -0.2 0.05">
       <freejoint name="banana_joint"/>
       <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
         mass="0.12" friction="7 7 0.5"/>
-    </body> -->
+    </body>
   </worldbody>
 
   <!-- <worldbody>
