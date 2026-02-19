@@ -17,8 +17,8 @@
     <material name="block_material" rgba="0.8 0.2 0.2 1"/>
 
     <!-- ADDED: Banana mesh and texture -->
-    <mesh name="banana_mesh" file="meshes/011_banana/textured.obj" scale="1 1 1"/>
-    <texture name="banana_tex" type="2d" file="meshes/011_banana/texture_map.png"/>
+    <mesh name="banana_mesh" file="011_banana/textured.obj" scale="1 1 1"/>
+    <texture name="banana_tex" type="2d" file="011_banana/texture_map.png"/>
     <material name="banana_mat" texture="banana_tex"/>
   </asset>
 
