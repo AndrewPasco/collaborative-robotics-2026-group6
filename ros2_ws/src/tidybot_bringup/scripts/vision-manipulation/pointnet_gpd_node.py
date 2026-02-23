@@ -168,6 +168,7 @@ class PointNetGPDNode(Node):
             self.get_logger().error(f"Could not transform grasp from {grasp_msg.header.frame_id} to {target_frame}: {e}")
             return
 
+
         # 2. Prepare and send request
         req = PlanToTarget.Request()
         req.arm_name = "right" # Default to right arm
@@ -179,6 +180,9 @@ class PointNetGPDNode(Node):
         transformed_pose_msg.pose.orientation.y = 0.5
         transformed_pose_msg.pose.orientation.z = -0.5
         transformed_pose_msg.pose.orientation.w = 0.5
+
+        # Publish to topic for manipulation execution
+        self.pose_pub.publish(transformed_pose_msg)
         
         req.target_pose = transformed_pose_msg.pose
         req.use_orientation = True
@@ -188,8 +192,8 @@ class PointNetGPDNode(Node):
         self.get_logger().info(f"Sending plan request to {req.arm_name} arm (using top-down orientation)...")
         
         # Call asynchronously
-        future = self.plan_client.call_async(req)
-        future.add_done_callback(self.planner_response_callback)
+        # future = self.plan_client.call_async(req)
+        # future.add_done_callback(self.planner_response_callback)
 
     def planner_response_callback(self, future):
         try:
@@ -404,8 +408,8 @@ class PointNetGPDNode(Node):
                 if math.isnan(x) or math.isnan(y) or math.isnan(z): continue
                 
                 # Spatial crop (workspace limits)
-                # Z: 0.1m to 0.7m (robot reach)
-                if (0.1 < z < 0.5):
+                # Z: 0.1m to 0.5m (robot reach)
+                if (0.1 < z < 0.6):
                     points.append([x, y, z])
                 
         return np.array(points, dtype=np.float32)
@@ -446,8 +450,8 @@ class PointNetGPDNode(Node):
         msg.pose.orientation.z = float(quat[2])
         msg.pose.orientation.w = float(quat[3])
         
-        self.pose_pub.publish(msg)
-        self.get_logger().info(f"Published grasp pose in {header.frame_id}: {center}")
+        # self.pose_pub.publish(msg)
+        # self.get_logger().info(f"Published grasp pose in {header.frame_id}: {center}")
         return msg
 
 def main(args=None):

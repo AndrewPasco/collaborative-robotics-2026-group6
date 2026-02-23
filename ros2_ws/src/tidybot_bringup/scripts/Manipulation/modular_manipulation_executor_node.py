@@ -608,7 +608,7 @@ class ManipulationExecutorNode(Node):
         request = PlanToTarget.Request()
         request.arm_name = self.arm_name
         request.target_pose = target_pose
-        request.use_orientation = False      # position-only for now
+        request.use_orientation = True      # position-only for now
         request.execute = True               # let planner send the arm command
         request.duration = self.move_duration
         request.max_condition_number = 100.0
