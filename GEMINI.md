@@ -126,6 +126,10 @@ collaborative-robotics-2026/
     ├── setup_env.bash       # Environment setup (source this!)
     └── src/
         ├── tidybot_bringup/     # Launch files & test scripts
+            └── scripts/
+                └── vision-manipulation/ # Vision and manipulation nodes
+                    ├── grasp_planner_node.py
+                    └── graspnet_wrapper.py
         ├── tidybot_client/      # Remote client utilities & DDS configs
         ├── tidybot_control/     # Arm/base/pan-tilt controllers
         ├── tidybot_description/ # URDF/XACRO robot model
@@ -156,7 +160,7 @@ float64 duration            # Movement time in seconds
 -   **Perception (VLMs):** You are encouraged to use Visual Language Models for object detection from language commands.
     -   Google Gemini can be used with provided cloud credits.
     -   Local models like `YOLOv11` with `CLIP` are also excellent options.
--   **Grasping:** `GraspAnything` can be used to propose candidate grasp poses on objects.
+-   **Grasping:** `GraspNet` can be used to propose candidate grasp poses on objects.
 -   **Motion Planning (IK):** The `tidybot_ik` package uses `mink` for lightweight inverse kinematics and trajectory optimization, as an alternative to MoveIt2.
 
 ## 6. Development Workflow

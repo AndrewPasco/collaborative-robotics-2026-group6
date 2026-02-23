@@ -23,6 +23,7 @@ uv.lock
 *.swp
 *.swo
 *~
+.env
 
 # OS
 .DS_Store

@@ -161,7 +161,7 @@ def generate_launch_description():
     )
 
     declare_camera_rate = DeclareLaunchArgument(
-        'camera_rate', default_value='30.0',
+        'camera_rate', default_value='3.0',
         description='Camera publish rate in Hz (e.g. 1.0 for low bandwidth)'
     )
 

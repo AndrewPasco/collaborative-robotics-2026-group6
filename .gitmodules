@@ -1,0 +1,3 @@
+[submodule "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/graspnet-baseline"]
+	path = ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/graspnet-baseline
+	url = https://github.com/peasant98/graspnet-baseline

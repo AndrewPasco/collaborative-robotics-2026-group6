@@ -44,6 +44,10 @@ install(PROGRAMS
   scripts/navigation_node.py
   scripts/manipulation_node.py
   scripts/speech_node.py
+  scripts/vision-manipulation/grasp_planner_node.py
+  scripts/Navigation/navigator.py
+  scripts/Navigation/vision_nav.py
+  scripts/Navigation/vision_yolo_gemini.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
