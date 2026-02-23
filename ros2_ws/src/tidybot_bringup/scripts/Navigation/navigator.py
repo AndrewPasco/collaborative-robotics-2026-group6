@@ -20,6 +20,22 @@ Setup:
   4. cd ros2_ws && colcon build --packages-select tidybot_bringup
   5. source setup_env.bash
   6. ros2 run tidybot_bringup navigator.py
+  
+Bringup:
+ros2 launch tidybot_bringup sim.launch.py \
+scene:=scene_pickup.xml \
+use_rviz:=true \
+show_mujoco_viewer:=true
+
+ros2 run tidybot_bringup navigator.py
+
+ros2 run tidybot_bringup vision_yolo_gemini.py
+
+# 1. Set target to banana
+ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
+
+# 2. Trigger SCAN
+ros2 topic pub --once /navigator/command std_msgs/msg/String "{data: 'SCAN'}"
 """
 
 import rclpy
@@ -31,6 +47,7 @@ import math
 from geometry_msgs.msg import Twist, Point, Pose
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import JointState
 
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                     TUNABLE PARAMETERS                         ║
@@ -48,8 +65,10 @@ IMAGE_CENTER_X = IMAGE_WIDTH / 2.0
 #   HW2: angular_vel = Kp * (theta_ref - theta_current)       [rad error]
 #   Here: angular_vel = KP_ANGULAR * (center_px - object_px)  [pixel error]
 KP_ANGULAR = 0.003           # rad/s per pixel of centering error
-APPROACH_LINEAR_VEL = 0.15   # m/s forward speed while approaching
-CENTERING_DEADZONE = 30      # pixels — don't correct if within this
+APPROACH_LINEAR_VEL = 0.5   # m/s max forward speed
+CENTERING_DEADZONE = 5       # pixels — reduced to prevent deadlock with alignment threshold
+KP_APPROACH_LINEAR = 0.01    # m/s per pixel of vertical error (sharper deceleration)
+MIN_APPROACH_LINEAR_VEL = 0.04 # m/s floor to prevent stalling
 
 # --- AprilTag Return-to-Start Gains (step I) ---
 # Same Kp structure as HW2 P7, but error is in meters from PnP:
@@ -111,7 +130,7 @@ class Navigator(Node):
         # ── Object detection (from Vision node — HW2 P3/P4 output) ──
         self.latest_detection = None       # Point(x=px, y=py, z=area)
         self.detection_stamp = 0.0
-        self.detection_timeout = 1.0       # seconds
+        self.detection_timeout = 3.0       # seconds — longer to survive manual testing gaps
 
         # ── AprilTag pose (from Vision node — HW2 P6 solvePnP output) ──
         self.apriltag_pose = None          # Pose with position = tvec
@@ -137,10 +156,16 @@ class Navigator(Node):
             String, '/navigator/command',
             self.command_cb, 10)
 
-        # Odometry — identical to HW2 P7
+        # Odometry — from /odom on real robot (may not exist in sim)
         self.create_subscription(
             Odometry, '/odom',
             self.odom_cb, 10)
+
+        # Joint states — extract base pose (joint_x, joint_y, joint_th)
+        # This is the primary odometry source in MuJoCo simulation
+        self.create_subscription(
+            JointState, '/joint_states',
+            self.joint_states_cb, 10)
 
         # Object detection from Vision node (HW2 P3-P4 pipeline output)
         # Convention: x=pixel_x, y=pixel_y, z=bbox_area
@@ -172,6 +197,9 @@ class Navigator(Node):
         if cmd == "SCAN":
             self.state = STATE_SCANNING
             self.scan_start_time = time.time()
+            self.scan_accumulated_theta = 0.0
+            self.last_scan_theta = self.odom_theta
+            
             # Save home pose for odom-based return fallback
             self.start_x = self.odom_x
             self.start_y = self.odom_y
@@ -210,6 +238,27 @@ class Navigator(Node):
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self.odom_theta = math.atan2(siny_cosp, cosy_cosp)
 
+    def joint_states_cb(self, msg: JointState):
+        """
+        Extract base pose from /joint_states (MuJoCo simulation).
+
+        The MuJoCo bridge publishes joint_x, joint_y, joint_th in
+        /joint_states but does NOT publish /odom. This callback
+        provides odometry in simulation.
+        """
+        try:
+            names = list(msg.name)
+            positions = list(msg.position)
+            if 'joint_x' in names and 'joint_y' in names and 'joint_th' in names:
+                idx_x = names.index('joint_x')
+                idx_y = names.index('joint_y')
+                idx_th = names.index('joint_th')
+                self.odom_x = positions[idx_x]
+                self.odom_y = positions[idx_y]
+                self.odom_theta = positions[idx_th]
+        except (ValueError, IndexError):
+            pass
+
     def detection_cb(self, msg: Point):
         """Object detection from Vision node (HW2 P3-P4 pipeline)."""
         self.latest_detection = msg
@@ -238,23 +287,39 @@ class Navigator(Node):
     # ═══════════════════════════════════════════════════════════
 
     def do_scan(self):
-        elapsed = time.time() - self.scan_start_time
+        # Track rotation via odometry diff (handles wrap-around)
+        diff = self._wrap(self.odom_theta - self.last_scan_theta)
+        self.scan_accumulated_theta += abs(diff)
+        self.last_scan_theta = self.odom_theta
 
-        # If Vision found the target mid-scan, stop early
+        # Log progress every ~1 second (every 10 ticks at 10Hz)
+        if not hasattr(self, '_scan_log_count'):
+            self._scan_log_count = 0
+        self._scan_log_count += 1
+        if self._scan_log_count % 10 == 0:
+            elapsed = time.time() - self.scan_start_time
+            self.get_logger().info(
+                f'Scan: {self.scan_accumulated_theta:.2f}/{2*math.pi:.2f} rad, '
+                f'odom_theta={self.odom_theta:.3f}, elapsed={elapsed:.1f}s, '
+                f'has_detection={self._has_fresh_detection()}')
+
+        # If Vision found the target mid-scan, auto-transition to APPROACH
         if self._has_fresh_detection():
             self.send_vel(0.0, 0.0)
-            self.state = STATE_IDLE
-            self.get_logger().info('Scan: target detected — stopping early')
-            self.publish_status("SCAN_COMPLETE")
+            self.state = STATE_APPROACHING
+            self._scan_log_count = 0
+            self.get_logger().info('Scan: target detected — transitioning to APPROACH')
+            self.publish_status(STATE_APPROACHING)
             return
 
-        # Otherwise keep spinning
-        if elapsed < SCAN_FULL_ROTATION:
+        # Otherwise keep spinning until a full 360 (2*pi) is reached
+        if self.scan_accumulated_theta < (2 * math.pi - 0.1):
             self.send_vel(0.0, SCAN_ANGULAR_VEL)
         else:
             self.send_vel(0.0, 0.0)
             self.state = STATE_IDLE
-            self.get_logger().info('Scan: full rotation complete')
+            self._scan_log_count = 0
+            self.get_logger().info(f'Scan: full rotation complete (accumulated {self.scan_accumulated_theta:.2f} rad)')
             self.publish_status("SCAN_COMPLETE")
 
     # ═══════════════════════════════════════════════════════════
@@ -281,21 +346,31 @@ class Navigator(Node):
 
         # ── Check stale detection ──
         if not self._has_fresh_detection():
-            self.get_logger().warn('Detection lost — searching...')
-            self.send_vel(0.0, SCAN_ANGULAR_VEL * 0.3)
+            # Wait instead of spinning. Spinning causes huge oscillation when redetected.
+            self.get_logger().warn('Detection lost — stopping and waiting for vision...')
+            self.send_vel(0.0, 0.0)
+            return
+
+        # ── Visual Servoing with Lag Protection ──
+        # If the frame is older than 0.5s, stop to prevent massive overshoot (shimmying)
+        age = time.time() - self.detection_stamp
+        if age > 0.5:
+            self.send_vel(0.0, 0.0)
             return
 
         det = self.latest_detection
         pixel_x   = det.x
+        pixel_y   = det.y
         bbox_area = det.z
 
-        # ── Coarse "close enough" via bbox area ──
-        area_ratio = bbox_area / (IMAGE_WIDTH * IMAGE_HEIGHT)
-        if area_ratio > CLOSE_BBOX_AREA_RATIO:
+        # ── Check if close enough for grasping (Bottom of screen) ──
+        # Objects get lower in the image as we get closer.
+        # Stop when the center of the object (pixel_y) is near the bottom edge.
+        if pixel_y > IMAGE_HEIGHT - 30:
             self.send_vel(0.0, 0.0)
             self.state = STATE_ARRIVED
             self.get_logger().info(
-                f'ARRIVED — bbox ratio = {area_ratio:.3f} > {CLOSE_BBOX_AREA_RATIO}')
+                f'ARRIVED — grasp position reached (y={pixel_y:.0f})')
             self.publish_status(STATE_ARRIVED)
             return
 
@@ -308,8 +383,28 @@ class Navigator(Node):
         if abs(error_x) < CENTERING_DEADZONE:
             omega = 0.0
 
-        # Linear: drive forward, slow down as we get closer
-        v = APPROACH_LINEAR_VEL * (1.0 - min(area_ratio / CLOSE_BBOX_AREA_RATIO, 0.8))
+        # ── FACE-FIRST ALIGNMENT (User request) ──
+        # If centering error is large, don't move forward yet.
+        # This prevents the "arc" motion and ensure a direct "b-line".
+        # Once reasonably centered, drive while continuing to adjust.
+        if abs(error_x) > 20:
+            v = 0.0
+            
+            # Throttle the logging to avoid spamming at 10Hz
+            import time as _t
+            _now = _t.time()
+            if _now - getattr(self, '_last_align_log', 0) >= 0.5:
+                self._last_align_log = _now
+                self.get_logger().info(f'APPROACH: face-first aligning (offset {error_x:.1f}px)')
+        else:
+            # ── Proportional Slowdown (User request) ──
+            # v = KP_APPROACH_LINEAR * (target_y - current_y)
+            target_y = IMAGE_HEIGHT - 30
+            error_y = target_y - pixel_y
+            
+            # v scales from APPROACH_LINEAR_VEL down to MIN_APPROACH_LINEAR_VEL
+            v = KP_APPROACH_LINEAR * error_y
+            v = max(MIN_APPROACH_LINEAR_VEL, min(v, APPROACH_LINEAR_VEL))
 
         self.send_vel(v, omega)
 

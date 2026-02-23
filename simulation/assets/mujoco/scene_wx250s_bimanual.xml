@@ -20,4 +20,21 @@
     <light pos="0 0 1.5" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
   </worldbody>
+  <!-- Keyframes defined per-scene (moved from tidybot_wx250s_bimanual.xml) so
+   that
+         scenes with freejoint objects can specify their own "home" without name
+   collisions. -->
+    <keyframe>
+      <key name="home" qpos="0 0 1.5708
+        0 0
+        0 0 0 0 0 0 0.037 0.037
+        0 0 0 0 0 0 0.037 0.037"
+        ctrl="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037"/>
+      <key name="retract" qpos="0 0 1.5708
+        0 0
+        0 -0.5 1.57 0 0 0 0.037 0.037
+        0 -0.5 1.57 0 0 0 0.037 0.037"
+        ctrl="0 0 1.5708 0 0 0 -0.5 1.57 0 0 0 0.037 0.037 0 -0.5 1.57 0 0 0
+  0.037 0.037"/>
+    </keyframe>
 </mujoco>

@@ -32,7 +32,11 @@ import math
 import os
 import json
 import base64
+import time
 from io import BytesIO
+from dotenv import load_dotenv
+load_dotenv()
+
 
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point, Pose
@@ -43,11 +47,11 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 #  CONFIGURATION
 # ══════════════════════════════════════════════════════════════
 
-# YOLO model — yolov8n is fastest, yolov8s/m for better accuracy
-YOLO_MODEL = "yolov8n.pt"
+# YOLO model 
+YOLO_MODEL = "yolo26x.pt"
 
 # Gemini model
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # Minimum confidence for YOLO detections
 YOLO_CONFIDENCE = 0.5
@@ -129,12 +133,23 @@ class VisionYoloGemini(Node):
             f'Vision ready. YOLO={self.yolo_available}, Gemini={self.gemini_available}')
 
     def _load_yolo(self):
-        """Load YOLO model."""
+        """Load YOLO model from a stable directory (no cwd changes)."""
         try:
             from ultralytics import YOLO
-            self.yolo_model = YOLO(YOLO_MODEL)
+            model_dir = os.path.expanduser('~/.yolo_models')
+            os.makedirs(model_dir, exist_ok=True)
+            model_path = os.path.join(model_dir, YOLO_MODEL)
+
+            if not os.path.exists(model_path):
+                self.get_logger().info(f'Downloading {YOLO_MODEL} to {model_path}...')
+                import urllib.request
+                url = f'https://github.com/ultralytics/assets/releases/download/v8.4.0/{YOLO_MODEL}'
+                urllib.request.urlretrieve(url, model_path)
+                self.get_logger().info(f'Download complete: {model_path}')
+
+            self.yolo_model = YOLO(model_path)
             self.yolo_available = True
-            self.get_logger().info(f'YOLO loaded: {YOLO_MODEL}')
+            self.get_logger().info(f'YOLO loaded: {model_path}')
         except ImportError:
             self.get_logger().warn(
                 'ultralytics not installed. Run: pip install ultralytics')
@@ -199,7 +214,8 @@ class VisionYoloGemini(Node):
 
         # Check if it matches a YOLO class
         if self.yolo_available:
-            yolo_classes = self.yolo_model.names.values()
+            yolo_classes = list(self.yolo_model.names.values())
+            self.get_logger().info(f'Available YOLO classes: {yolo_classes}')
             for cls in yolo_classes:
                 if cls.lower() in query or query in cls.lower():
                     self.target_class = cls
@@ -207,10 +223,23 @@ class VisionYoloGemini(Node):
                     return
 
         self.target_class = None
-        self.get_logger().info('No YOLO class match, will use Gemini')
+        self.get_logger().info(f'No YOLO class match for "{query}", will use Gemini')
 
     def image_cb(self, msg: Image):
         """Process each camera frame."""
+        # Log every ~1 second to show activity
+        now = time.time()
+        if not hasattr(self, '_last_log_time'): self._last_log_time = 0.0
+        if not hasattr(self, '_frame_count'): self._frame_count = 0
+        self._frame_count += 1
+        if now - self._last_log_time >= 1.0:
+            self._last_log_time = now
+            yolo_classes = [d['class'] for d in self.latest_detections] if self.latest_detections else []
+            self.get_logger().info(
+                f'Frame {self._frame_count} | target: {self.target_query} | '
+                f'target_class: {self.target_class} | '
+                f'YOLO sees: {yolo_classes}')
+
         frame = self._ros_image_to_cv2(msg)
         if frame is None:
             return
@@ -369,6 +398,14 @@ Image dimensions are 640x480. Give pixel coordinates."""
             det.y = float(best['cy'])
             det.z = float(best['area'])
             self.detection_pub.publish(det)
+            # Log when we publish a detection (once per second max)
+            import time as _t
+            _now = _t.time()
+            if _now - getattr(self, '_last_det_log', 0) >= 1.0:
+                self._last_det_log = _now
+                self.get_logger().info(
+                    f'Published detection: {best.get("class","?")} '
+                    f'at ({best["cx"]:.0f},{best["cy"]:.0f}) area={best["area"]:.0f}')
 
     def _publish_detections_json(self):
         """Publish all detections as JSON for debugging/Brain node."""

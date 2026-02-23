@@ -38,6 +38,9 @@ install(PROGRAMS
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
   scripts/vision-manipulation/grasp_planner_node.py
+  scripts/Navigation/navigator.py
+  scripts/Navigation/vision_nav.py
+  scripts/Navigation/vision_yolo_gemini.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

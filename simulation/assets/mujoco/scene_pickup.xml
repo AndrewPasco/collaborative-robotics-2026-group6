@@ -14,7 +14,12 @@
     <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
       markrgb="0.8 0.8 0.8" width="300" height="300"/>
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
-    <material name="block_material" rgba="0.8 0.2 0.2 1"/>
+    <material name="block_material" rgba="0.8 0.2 0.2 1"/> 
+
+    <!-- Banana mesh and texture -->
+    <mesh name="banana_mesh" file="011_banana/textured.obj" scale="1 1 1"/>
+    <texture name="banana_tex" type="2d" file="../meshes/011_banana/texture_map.png"/>
+    <material name="banana_mat" texture="banana_tex"/>
   </asset>
 
   <worldbody>
@@ -22,10 +27,22 @@
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
 
     <!-- Block to pick up - positioned farther in front of the robot -->
-    <body name="block" pos="0.55 -0.15 0.025">
+    <!-- <body name="block" pos="0.55 -0.15 0.025">
       <freejoint name="block_joint"/>
       <geom name="block_geom" type="box" size="0.025 0.025 0.025" mass="0.1" material="block_material"
         friction="1.0 0.5 0.5" solref="0.01 1" solimp="0.99 0.99 0.001"/>
+    </body> -->
+
+    <!-- Banana - Has freejoint and is reset by the custom keyframe below -->
+    <body name="banana" pos="1.5 0.0 0.02">
+      <freejoint name="banana_joint"/>
+      <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
+        mass="0.12" friction="7 7 0.5"/>
     </body>
   </worldbody>
+
+  <keyframe>
+    <!-- 21 robot dofs + 7 banana dofs = 28 total -->
+    <key name="home" qpos="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037 1.5 0.0 0.05 1 0 0 0"/>
+  </keyframe>
 </mujoco>
