@@ -182,7 +182,7 @@ class PointNetGPDNode(Node):
         
         req.target_pose = transformed_pose_msg.pose
         req.use_orientation = True
-        req.execute = True
+        req.execute = False
         req.duration = 2.0
         
         self.get_logger().info(f"Sending plan request to {req.arm_name} arm (using top-down orientation)...")

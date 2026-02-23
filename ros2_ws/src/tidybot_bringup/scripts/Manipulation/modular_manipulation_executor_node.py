@@ -204,7 +204,7 @@ class ManipulationExecutorNode(Node):
         # ── CHANGE 7: Subscribe to BOTH grasp pose topics ───────────────
         # Legacy topic (for manual testing / backward compatibility)
         self.grasp_pose_sub = self.create_subscription(
-            PoseStamped, "/planned_grasp", self._grasp_pose_cb, 10,
+            PoseStamped, "/detected_grasps/pose", self._grasp_pose_cb, 10,
             callback_group=self.cb_group,
         )
 
