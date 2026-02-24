@@ -15,12 +15,16 @@ Launches the FULL system in one command:
    - brain_node        (state machine orchestrator)
 
 Usage:
-    ros2 launch tidybot_bringup brain.launch.py
+    ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml show_mujoco_viewer:=true use_rviz:=true 
+    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
+Test audio:
+    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /mnt/hgfs/CS339R/Lab/banana.wav'}"
 """
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -30,12 +34,23 @@ from launch.substitutions import PathJoinSubstitution
 def generate_launch_description():
     # ── Include sim.launch.py (simulation + visualization) ──────────
     pkg_bringup = FindPackageShare('tidybot_bringup')
+    declare_use_rviz = DeclareLaunchArgument(
+        'use_rviz', default_value='true',
+        description='Launch RViz for visualization'
+    )
+
+    declare_show_viewer = DeclareLaunchArgument(
+        'show_mujoco_viewer', default_value='true',
+        description='Show MuJoCo viewer window'
+    )
     sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([pkg_bringup, 'launch', 'sim.launch.py'])
         ),
         launch_arguments={
-            'camera_rate': '1.0',
+            'camera_rate': '3.0',
+            'use_rviz': LaunchConfiguration('use_rviz'),
+            'show_mujoco_viewer': LaunchConfiguration('show_mujoco_viewer'),
         }.items(),
     )
 
@@ -56,7 +71,7 @@ def generate_launch_description():
 
     navigation = Node(
         package='tidybot_bringup',
-        executable='navigation_node.py',
+        executable='navigator.py',
         name='navigation_node',
         output='screen',
     )
@@ -75,13 +90,24 @@ def generate_launch_description():
         output='screen',
     )
 
+    vision = Node(
+        package='tidybot_bringup',
+        executable='vision_yolo_gemini.py',
+        name='vision_node',
+        output='screen',
+    )
+
     return LaunchDescription([
+        # Arguments
+        declare_use_rviz,
+        declare_show_viewer,
         # Simulation layer
         sim_launch,
         # Brain layer
         microphone,
         speech,
         navigation,
+        vision,
         manipulation,
         brain,
     ])

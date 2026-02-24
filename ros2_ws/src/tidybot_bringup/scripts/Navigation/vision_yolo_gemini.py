@@ -42,6 +42,7 @@ from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point, Pose
 from std_msgs.msg import String
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy, qos_profile_sensor_data
+from cv_bridge import CvBridge
 
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURATION
@@ -110,6 +111,10 @@ class VisionYoloGemini(Node):
             Pose, '/apriltag_pose', 10)
         self.detections_json_pub = self.create_publisher(
             String, '/vision/detections', 10)
+        self.annotated_pub = self.create_publisher(
+            Image, '/vision/annotated_image', 10)
+
+        self.cv_bridge = CvBridge()
 
         # ── Subscribers ──
         # Use sensor_data QoS profile for camera (BEST_EFFORT, VOLATILE)
@@ -227,18 +232,35 @@ class VisionYoloGemini(Node):
 
     def image_cb(self, msg: Image):
         """Process each camera frame."""
-        # Log every ~1 second to show activity
-        now = time.time()
+        # 1. Drop Stale Frames to Prevent ROS Queue Backlog
+        # The camera publishes at 3 Hz (or higher). Inference takes time.
+        # If we process every frame sequentially from the queue, we get further and further
+        # behind real time. We want to process only the ABSOLUTE NEWEST frame.
+        
+        # Calculate frame age using ROS header stamp vs local clock
+        frame_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        # In simulation, we must use SIM TIME.
+        now_time = self.get_clock().now().nanoseconds * 1e-9
+        age = now_time - frame_time
+        
+        # Initialize attributes if this is the first frame
         if not hasattr(self, '_last_log_time'): self._last_log_time = 0.0
         if not hasattr(self, '_frame_count'): self._frame_count = 0
         self._frame_count += 1
-        if now - self._last_log_time >= 1.0:
-            self._last_log_time = now
+
+        # Log every ~1 second to show activity
+        if now_time - self._last_log_time >= 1.0:
+            self._last_log_time = now_time
             yolo_classes = [d['class'] for d in self.latest_detections] if self.latest_detections else []
             self.get_logger().info(
-                f'Frame {self._frame_count} | target: {self.target_query} | '
+                f'Frame {self._frame_count} | age: {age:.2f}s | target: {self.target_query} | '
                 f'target_class: {self.target_class} | '
                 f'YOLO sees: {yolo_classes}')
+
+        # Drop the frame if it's too old (we only want the freshest frame)
+        # For a 3Hz camera (0.33s interval), 0.25s age means the frame is nearly stale.
+        if age > 0.25:
+            return
 
         frame = self._ros_image_to_cv2(msg)
         if frame is None:
@@ -263,13 +285,21 @@ class VisionYoloGemini(Node):
         # 5. Publish all detections as JSON
         self._publish_detections_json()
 
+        # 6. Publish annotated image for debugging
+        self._publish_annotated_image(frame, msg.header)
+
     # ═══════════════════════════════════════════════════════════
     #  YOLO DETECTION
     # ═══════════════════════════════════════════════════════════
 
     def _run_yolo(self, frame: np.ndarray):
         """Run YOLO object detection."""
-        results = self.yolo_model(frame, conf=YOLO_CONFIDENCE, verbose=False)
+        # Crop the top half of the image to speed up inference (background)
+        h = frame.shape[0]
+        crop_y = h // 2
+        cropped_frame = frame[crop_y:, :]
+        
+        results = self.yolo_model(cropped_frame, conf=YOLO_CONFIDENCE, verbose=False)
 
         self.latest_detections = []
         for r in results:
@@ -278,7 +308,11 @@ class VisionYoloGemini(Node):
                 cls_id = int(box.cls[0])
                 cls_name = self.yolo_model.names[cls_id]
                 conf = float(box.conf[0])
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                x1, y1_crop, x2, y2_crop = box.xyxy[0].tolist()
+                
+                # Add back the vertical crop offset so coordinates match original 640x480 frame
+                y1 = y1_crop + crop_y
+                y2 = y2_crop + crop_y
 
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
@@ -388,7 +422,7 @@ Image dimensions are 640x480. Give pixel coordinates."""
                 best = self.gemini_result
 
         # If no target set, just use largest detection
-        if best is None and self.latest_detections:
+        if not self.target_query and best is None and self.latest_detections:
             best = max(self.latest_detections, key=lambda d: d['area'])
 
         # Publish
@@ -416,6 +450,42 @@ Image dimensions are 640x480. Give pixel coordinates."""
         msg = String()
         msg.data = json.dumps(all_dets)
         self.detections_json_pub.publish(msg)
+
+    def _publish_annotated_image(self, frame, header):
+        """Draw bounding boxes and publish the annotated image."""
+        annotated_frame = frame.copy()
+        
+        # Draw YOLO detections
+        for det in self.latest_detections:
+            x1, y1, x2, y2 = [int(v) for v in det['bbox']]
+            label = f"{det.get('class', '')} {det.get('confidence', 0.0):.2f}"
+            
+            # Highlight target class in green, others in blue
+            if self.target_class and det.get('class', '').lower() == self.target_class.lower():
+                color = (0, 255, 0)
+                thickness = 3
+            else:
+                color = (255, 0, 0)
+                thickness = 1
+                
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, thickness)
+            cv2.putText(annotated_frame, label, (x1, max(y1-5, 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness)
+                        
+        # Draw Gemini detection if any
+        if self.gemini_result:
+            x1, y1, x2, y2 = [int(v) for v in self.gemini_result['bbox']]
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(annotated_frame, f"Gemini: {self.target_query}", (x1, max(y1-5, 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        
+        # Publish
+        try:
+            annotated_msg = self.cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
+            annotated_msg.header = header
+            self.annotated_pub.publish(annotated_msg)
+        except Exception as e:
+            self.get_logger().error(f"Failed to publish annotated image: {e}", once=True)
 
     # ═══════════════════════════════════════════════════════════
     #  APRILTAG DETECTION (same as vision_nav.py)

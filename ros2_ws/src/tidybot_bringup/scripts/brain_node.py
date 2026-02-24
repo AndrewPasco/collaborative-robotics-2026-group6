@@ -65,6 +65,10 @@ class BrainNode(Node):
         self.mujoco_ready = False
         self.create_subscription(JointState, '/joint_states', self._joint_state_cb, 10)
 
+        # ── User Commands ───────────────────────────────────────────
+        self.start_command = None
+        self.create_subscription(String, '/brain/command', self._command_cb, 10)
+
         # ── State machine ───────────────────────────────────────────
         self.state = BrainState.IDLE
         self.target_item: str | None = None
@@ -92,6 +96,10 @@ class BrainNode(Node):
 
 
     # -- Callbacks ---------------------------------------------------
+
+    def _command_cb(self, msg: String):
+        self.start_command = msg.data.strip()
+        self.get_logger().info(f'Received user command: {self.start_command}')
 
     def _speech_cb(self, msg: String):
         self.speech_result = msg.data
@@ -134,17 +142,26 @@ class BrainNode(Node):
                      self.get_logger().info('Waiting for MuJoCo simulation to start...')
                 return
 
-            # Simulation confirmed running -> Auto start
-            self.get_logger().info('[OK] MuJoCo running. Starting task sequence in 5 seconds...')
-            time.sleep(5.0)
+            if self.start_command is None:
+                if elapsed > 1.0 and int(elapsed) % 5 == 0:
+                     self.get_logger().info('Waiting for start command on /brain/command...')
+                return
+
+            # Simulation confirmed running and start command received
+            self.get_logger().info(f'[OK] MuJoCo running. Executing command "{self.start_command}"...')
             self._transition(BrainState.WAITING_FOR_COMMAND)
 
         # --- A: tell speech_node to listen -------------------------
         elif self.state == BrainState.WAITING_FOR_COMMAND:
             if not self.goal_sent:
                 self.get_logger().info('--- A: WAITING FOR VERBAL COMMAND ---')
-                self._pub(self.speech_goal_pub, 'listen')
-                self.get_logger().info('  -> speech_node: "listen"')
+                if self.start_command.startswith('test_audio'):
+                    self._pub(self.speech_goal_pub, self.start_command)
+                    self.get_logger().info(f'  -> speech_node: "{self.start_command}"')
+                else:
+                    self._pub(self.speech_goal_pub, 'listen')
+                    self.get_logger().info('  -> speech_node: "listen"')
+                
                 self.goal_sent = True
                 self._transition(BrainState.LISTENING)
 
@@ -172,7 +189,7 @@ class BrainNode(Node):
         elif self.state == BrainState.NAVIGATING:
             if not self.goal_sent:
                 self.get_logger().info(f'--- B: NAVIGATE TO "{self.target_item}" ---')
-                self._pub(self.nav_goal_pub, f'find {self.target_item}')
+                self._pub(self.nav_goal_pub, f'{self.target_item}')
                 self.goal_sent = True
 
             if self.nav_status == 'arrived':
@@ -239,7 +256,8 @@ class BrainNode(Node):
 
             if elapsed > 5.0:
                 self.target_item = None
-                self._transition(BrainState.WAITING_FOR_COMMAND)
+                self.start_command = None
+                self._transition(BrainState.IDLE)
 
 
 def main(args=None):

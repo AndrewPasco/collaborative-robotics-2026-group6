@@ -38,7 +38,7 @@ class SpeechNode(Node):
             self.get_logger().warn('Microphone service not available!')
 
         # ── State ───────────────────────────────────────────────────────
-        self.extractor = ItemExtractorBase(api_key_path="/mnt/hgfs/CS339R/api.txt")
+        self.extractor = ItemExtractorBase()
         self.wav_path = '/tmp/speech_node_recording.wav'
         self.busy_lock = threading.Lock()
         self.is_busy = False
@@ -47,15 +47,22 @@ class SpeechNode(Node):
 
     def _goal_cb(self, msg: String):
         """Callback runs in Main Thread. Spawns Worker Thread."""
-        goal = msg.data.strip().lower()
-        if goal != 'listen':
+        goal = msg.data.strip()
+        
+        test_file = None
+        if goal.lower() == 'listen':
+            pass
+        elif goal.startswith('test_audio '):
+            test_file = goal.split(' ', 1)[1]
+        else:
             return
 
         with self.busy_lock:
             if self.is_busy:
-                self.get_logger().warn('Busy recording - ignoring "listen"')
+                self.get_logger().warn('Busy processing audio - ignoring request')
                 return
             self.is_busy = True
+            self.current_test_file = test_file
 
         # Run logic in a thread so we don't block the main spin loop
         t = threading.Thread(target=self._run_recording_sequence, daemon=True)
@@ -68,61 +75,65 @@ class SpeechNode(Node):
         """
         try:
             self.get_logger().info('Starting recording sequence...')
+            test_file = getattr(self, 'current_test_file', None)
 
-            # 1. FORCE STOP (Clear any stuck state)
-            # We use a short timeout and ignore errors
-            stop_req = AudioRecord.Request()
-            stop_req.start = False
-            future = self.mic_client.call_async(stop_req)
-            # Wait for result (safe because main thread is spinning)
-            try:
-                # 2.0s timeout to clear state
-                rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
-            except Exception:
-                pass # Ignore errors during force-stop
+            if test_file:
+                self.get_logger().info(f'Using test audio file: {test_file}')
+                if not os.path.exists(test_file):
+                    self._fail(f'Make sure test file exists: {test_file}')
+                    return
+                time.sleep(1.0) # Simulate some delay
+                self.wav_path = test_file
+            else:
+                # 1. FORCE STOP (Clear any stuck state)
+                stop_req = AudioRecord.Request()
+                stop_req.start = False
+                future = self.mic_client.call_async(stop_req)
+                try:
+                    rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+                except Exception:
+                    pass
 
-            time.sleep(0.5)
+                time.sleep(0.5)
 
-            # 2. START RECORDING
-            start_req = AudioRecord.Request()
-            start_req.start = True
-            future = self.mic_client.call_async(start_req)
-            
-            # Use manual wait loop instead of spin_until_future_complete
-            # because we are inside a node method, even if threaded
-            if not self._wait_for_future(future, timeout=12.0):
-                self._fail('Start recording timeout')
-                return
-            
-            result = future.result()
-            if not result.success:
-                self._fail(f'Start recording failed: {result.message}')
-                return
+                # 2. START RECORDING
+                start_req = AudioRecord.Request()
+                start_req.start = True
+                future = self.mic_client.call_async(start_req)
+                
+                if not self._wait_for_future(future, timeout=12.0):
+                    self._fail('Start recording timeout')
+                    return
+                
+                result = future.result()
+                if not result.success:
+                    self._fail(f'Start recording failed: {result.message}')
+                    return
 
-            self.get_logger().info(f'Recording started: {result.message}')
+                self.get_logger().info(f'Recording started: {result.message}')
 
-            # 3. RECORD DURATION
-            time.sleep(5.0)
+                # 3. RECORD DURATION
+                time.sleep(5.0)
 
-            # 4. STOP RECORDING
-            stop_req = AudioRecord.Request()
-            stop_req.start = False
-            future = self.mic_client.call_async(stop_req)
+                # 4. STOP RECORDING
+                stop_req = AudioRecord.Request()
+                stop_req.start = False
+                future = self.mic_client.call_async(stop_req)
 
-            if not self._wait_for_future(future, timeout=5.0):
-                self._fail('Stop recording timeout')
-                return
+                if not self._wait_for_future(future, timeout=5.0):
+                    self._fail('Stop recording timeout')
+                    return
 
-            result = future.result()
-            if not result.success:
-                self._fail(f'Stop recording failed: {result.message}')
-                return
-            
-            self.get_logger().info(f'Recorded {result.duration:.1f}s')
+                result = future.result()
+                if not result.success:
+                    self._fail(f'Stop recording failed: {result.message}')
+                    return
+                
+                self.get_logger().info(f'Recorded {result.duration:.1f}s')
 
-            # 5. PROCESS
-            self.extractor.save_wav(self.wav_path, result.audio_data, result.sample_rate)
-            self.get_logger().info(f'Audio saved to: {os.path.abspath(self.wav_path)}')
+                # 5. PROCESS
+                self.extractor.save_wav(self.wav_path, result.audio_data, result.sample_rate)
+                self.get_logger().info(f'Audio saved to: {os.path.abspath(self.wav_path)}')
             
             item, transcript = self.extractor.extract_item_from_audio(self.wav_path)
 

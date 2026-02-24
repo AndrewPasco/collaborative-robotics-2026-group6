@@ -12,13 +12,17 @@ import time
 import wave
 import json
 import io
+import os
+import glob
 import numpy as np
 import google.generativeai as genai
 from google.cloud import speech
 from google.api_core.exceptions import ResourceExhausted
+from dotenv import load_dotenv, find_dotenv
 
-# Configure Google Cloud Credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/mnt/hgfs/CS339R/collaborative-robotics-485523-05dfbadc5d79.json"
+# Load environment variables from .env if present (searches parent directories)
+load_dotenv(find_dotenv())
+
 
 
 def import_ros2():
@@ -35,34 +39,48 @@ def import_ros2():
 class ItemExtractorBase:
     """Base class for item extraction from audio using Gemini API."""
     
-    def __init__(self, api_key_path=None):
+    def __init__(self):
         """
         Initialize the item extractor.
-        
-        Args:
-            api_key_path: Path to file containing Gemini API key (default: /mnt/hgfs/CS339R/api.txt)
         """
-        # Setup API key from file
-        if api_key_path is None:
-            api_key_path = "/mnt/hgfs/CS339R/api.txt"
-        
-        if not os.path.exists(api_key_path):
-            raise FileNotFoundError(f'API key file not found: {api_key_path}')
-        
-        # Read API key from file
-        with open(api_key_path, 'r') as f:
-            api_key = f.readline().strip()
+        # 1. Try Environment Variable first
+        api_key = os.environ.get('GEMINI_API_KEY')
         
         if not api_key:
-            raise ValueError("API key file is empty")
+            raise ValueError("Gemini API key not found in GEMINI_API_KEY env or file. Please check your .env file.")
         
         # Configure Gemini
         genai.configure(api_key=api_key)
-        self.gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+        self.gemini_model = genai.GenerativeModel("models/gemini-2.0-flash-lite")
+        
+        # Setup Google Cloud Credentials if not provided via env
+        gcp_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+        if not gcp_creds:
+            # Look specifically for GOOGLE_CREDENTIALS.json in common locations
+            try:
+                # 1. Check user home directory (most robust to moving the script)
+                home_path = os.path.expanduser('~/GOOGLE_CREDENTIALS.json')
+                
+                # 2. Check current working directory
+                cwd_path = os.path.join(os.getcwd(), 'GOOGLE_CREDENTIALS.json')
+                
+                if os.path.exists(home_path):
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = home_path
+                    self.log(f"Using STT credentials from home: {home_path}")
+                elif os.path.exists(cwd_path):
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cwd_path
+                    self.log(f"Using STT credentials from CWD: {cwd_path}")
+            except Exception:
+                pass
         
         # Initialize Google Cloud Speech client
-        self.speech_client = speech.SpeechClient()
-        print('Audio Item Detector (STT + Gemini-Text) initialized')
+        try:
+            self.speech_client = speech.SpeechClient()
+            self.log('Audio Item Detector (STT + Gemini-Text) initialized')
+        except Exception as e:
+            self.log(f'WARNING: Failed to initialize Google Cloud SpeechClient: {e}')
+            self.log('Please ensure a .json credential file is in the git directory or configured in .env.')
+            self.speech_client = None
     
     def log(self, message):
         """Log a message."""
@@ -90,14 +108,22 @@ class ItemExtractorBase:
     
     def transcribe_audio(self, wav_path: str) -> str:
         """Transcribe WAV file via Google Cloud Speech-to-Text."""
+        if not getattr(self, 'speech_client', None):
+            self.log("STT Error: SpeechClient not initialized (missing GOOGLE_APPLICATION_CREDENTIALS?).")
+            return ""
         try:
+            # Detect sample rate from WAV header
+            with wave.open(wav_path, 'rb') as wf:
+                sample_rate = wf.getframerate()
+                self.log(f"Detected sample rate: {sample_rate} Hz")
+
             with io.open(wav_path, "rb") as audio_file:
                 content = audio_file.read()
 
             audio = speech.RecognitionAudio(content=content)
             config = speech.RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=16000,
+                sample_rate_hertz=sample_rate,
                 language_code="en-US",
                 enable_automatic_punctuation=True,
             )

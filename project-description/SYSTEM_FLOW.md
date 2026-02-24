@@ -34,7 +34,7 @@ graph TD
 | **IDLE** | Check `/joint_states` | Simulation Start | MuJoCo Bridge |
 | **WAITING** | Publish `listen` to `/brain/speech_goal` | - | Brain |
 | **LISTENING** | - | Result on `/brain/speech_result` | Speech Node |
-| **NAVIGATING** | Publish `find <item>` to `/brain/navigation_goal` | `arrived` on `/brain/navigation_status` | Navigation Node |
+| **NAVIGATING** | Publish `<item>` to `/brain/navigation_goal` | `arrived` on `/brain/navigation_status` | Navigation Node |
 | **GRABBING** | Publish `grab` to `/brain/manipulation_goal` | `done` on `/brain/manipulation_status` | Manipulation Node |
 | **RETURNING** | Publish `return_to_start` to `/brain/navigation_goal` | `arrived` on `/brain/navigation_status` | Navigation Node |
 | **RELEASING** | Publish `release` to `/brain/manipulation_goal` | `done` on `/brain/manipulation_status` | Manipulation Node |

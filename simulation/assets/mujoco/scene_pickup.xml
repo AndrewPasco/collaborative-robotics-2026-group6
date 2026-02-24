@@ -34,7 +34,7 @@
     </body> -->
 
     <!-- Banana - Has freejoint and is reset by the custom keyframe below -->
-    <body name="banana" pos="1.5 0.0 0.02">
+    <body name="banana" pos="1.5 1.0 0.02">
       <freejoint name="banana_joint"/>
       <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
         mass="0.12" friction="7 7 0.5"/>
@@ -43,6 +43,6 @@
 
   <keyframe>
     <!-- 21 robot dofs + 7 banana dofs = 28 total -->
-    <key name="home" qpos="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037 1.5 0.0 0.05 1 0 0 0"/>
+    <key name="home" qpos="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037 1.5 1.0 0.05 1 0 0 0"/>
   </keyframe>
 </mujoco>

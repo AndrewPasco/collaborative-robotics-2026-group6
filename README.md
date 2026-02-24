@@ -143,32 +143,52 @@ ros2 launch tidybot_bringup sim.launch.py use_rviz:=false
 ros2 launch tidybot_bringup sim.launch.py show_mujoco_viewer:=false
 ```
 
-## Quick Start REAL
+## 5. Task 1: Object Retrieval
 
-NOTE: You do not need to re-run "colcon build" for every new terminal, re-build is only necessary whenver source code was modified. Make sure to re-source for new terminals.
+This task leverages the full TidyBot autonomous stack including speech recognition, state machine logic, and YOLO-based visual navigation.
 
-**Terminal 1: Launch Initialization of TidyBot**
+### 5.1 Environment Setup
+
+Before running Task 1, you must configure your API keys and credentials:
+
+1.  **`.env` file**: Create a `.env` file in the root directory:
+    ```
+    GEMINI_API_KEY=your_gemini_api_key_here
+    ```
+2.  **Google Cloud Credentials**: Access to Google Cloud Speech-to-Text requires a service account JSON.
+    -   **Recommended**: Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the path of your JSON file.
+    -   **Fallback**: The system also searches for `~/GOOGLE_CREDENTIALS.json` (home directory) or `./GOOGLE_CREDENTIALS.json` (current working directory).
+3.  **YOLO Models**: The vision node will download YOLO models into `~/.yolo_models/`. 
+
+### 5.2 Running the Task
+
+**Terminal 1 - Launch the Brain (Autonomous Stack):**
 ```bash
 cd ros2_ws
-source setup_env.bash 
-
-# Launch bringup
-ros2 launch tidybot_bringup real.launch.py
+source setup_env.bash
+ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml
 ```
+*Note: Launches MuJoCo and RViz with the `/vision/annotated_image` debug stream pre-configured.*
 
-**Terminal 2: Run Command Script**
+**Terminal 2 - Issue Commands:**
+The robot defaults to an idle state waiting for a start command.
 ```bash
-cd ros2_ws
-source setup_env.bash 
+# Start the autonomous state machine
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 
-# Test base movement
-ros2 run tidybot_bringup test_base_real.py
-
-# Test bimanual arms
-ros2 run tidybot_bringup test_arms_real.py
+# Or, test with a specific audio file (if microphone is unavailable)
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /path/to/your/audio.wav'}"
 ```
 
-## Repository Structure
+### 5.3 Debugging Vision
+Open up RViz or use `rqt_image_view` to monitor the `/vision/annotated_image` topic. This stream shows real-time bounding boxes:
+- **Green**: Target object matches (e.g., "banana").
+- **Blue**: All other YOLO detections.
+- **Red**: Gemini open-vocabulary hits.
+
+---
+
+## 6. Repository Structure
 
 ### 5.1 Project Structure
 ```

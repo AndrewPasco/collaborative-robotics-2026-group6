@@ -21,21 +21,17 @@ Setup:
   5. source setup_env.bash
   6. ros2 run tidybot_bringup navigator.py
   
-Bringup:
-ros2 launch tidybot_bringup sim.launch.py \
-scene:=scene_pickup.xml \
-use_rviz:=true \
-show_mujoco_viewer:=true
+# 1. Start the simulation
+ros2 launch tidybot_bringup sim.launch.py scene:=scene_pickup.xml use_rviz:=true show_mujoco_viewer:=true
 
-ros2 run tidybot_bringup navigator.py
-
+# 2. Run the Vision node
 ros2 run tidybot_bringup vision_yolo_gemini.py
 
-# 1. Set target to banana
-ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
+# 3. Run the Navigator node
+ros2 run tidybot_bringup navigator.py
 
-# 2. Trigger SCAN
-ros2 topic pub --once /navigator/command std_msgs/msg/String "{data: 'SCAN'}"
+# 4. Trigger the approach (this automatically targets the vision node and starts scanning)
+ros2 topic pub --once /brain/navigation_goal std_msgs/msg/String "{data: 'banana'}"
 """
 
 import rclpy
@@ -44,8 +40,8 @@ import numpy as np
 import time
 import math
 
-from geometry_msgs.msg import Twist, Point, Pose
-from std_msgs.msg import String
+from geometry_msgs.msg import Twist, Point, Pose, Pose2D
+from std_msgs.msg import String, Bool
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 
@@ -64,10 +60,10 @@ IMAGE_CENTER_X = IMAGE_WIDTH / 2.0
 # Same concept as HW2 P7 Kp, but in pixel-space:
 #   HW2: angular_vel = Kp * (theta_ref - theta_current)       [rad error]
 #   Here: angular_vel = KP_ANGULAR * (center_px - object_px)  [pixel error]
-KP_ANGULAR = 0.003           # rad/s per pixel of centering error
-APPROACH_LINEAR_VEL = 0.5   # m/s max forward speed
+KP_ANGULAR = 0.001           # rad/s per pixel of centering error
+APPROACH_LINEAR_VEL = 0.3   # m/s max forward speed
 CENTERING_DEADZONE = 5       # pixels — reduced to prevent deadlock with alignment threshold
-KP_APPROACH_LINEAR = 0.01    # m/s per pixel of vertical error (sharper deceleration)
+KP_APPROACH_LINEAR = 0.02    # m/s per pixel of vertical error (sharper deceleration)
 MIN_APPROACH_LINEAR_VEL = 0.04 # m/s floor to prevent stalling
 
 # --- AprilTag Return-to-Start Gains (step I) ---
@@ -83,7 +79,7 @@ CLOSE_DEPTH_PNP = 0.45         # meters via AprilTag PnP (precise check)
 HOME_ARRIVAL_DEPTH = 0.30      # meters — "back at start" via AprilTag
 
 # --- Scanning (step B) ---
-SCAN_ANGULAR_VEL = 0.5        # rad/s while spinning
+SCAN_ANGULAR_VEL = 0.1        # rad/s while spinning
 SCAN_FULL_ROTATION = 2 * math.pi / SCAN_ANGULAR_VEL  # seconds for 360°
 
 # --- Safety Limits ---
@@ -147,14 +143,22 @@ class Navigator(Node):
 
         # ══════════ Publishers (same as HW2 P7) ══════════
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.status_pub  = self.create_publisher(String, '/navigator/status', 10)
+        self.status_pub  = self.create_publisher(String, '/brain/navigation_status', 10)
+        self.target_pub  = self.create_publisher(String, '/vision/target', 10)
+        self.target_pose_pub = self.create_publisher(Pose2D, '/base/target_pose', 10)
 
         # ══════════ Subscribers ══════════
 
         # Commands from Brain/Coordinator
         self.create_subscription(
-            String, '/navigator/command',
+            String, '/brain/navigation_goal',
             self.command_cb, 10)
+            
+        # Target Pose reached confirmation from base controller (sim or real)
+        self.goal_reached_flag = False
+        self.create_subscription(
+            Bool, '/base/goal_reached',
+            self.goal_reached_cb, 10)
 
         # Odometry — from /odom on real robot (may not exist in sim)
         self.create_subscription(
@@ -182,8 +186,8 @@ class Navigator(Node):
         # ══════════ Control loop (10 Hz, same rate as HW2 P7) ══════════
         self.timer = self.create_timer(0.1, self.control_loop)
 
-        self.get_logger().info('Navigator ready. Send commands to /navigator/command')
-        self.publish_status(STATE_IDLE)
+        self.get_logger().info('Navigator ready. Waiting for Brain navigation goals on /brain/navigation_goal')
+        self.publish_status('idle')
 
     # ═══════════════════════════════════════════════════════════
     #  CALLBACKS
@@ -191,10 +195,39 @@ class Navigator(Node):
 
     def command_cb(self, msg: String):
         """Commands from Brain node."""
-        cmd = msg.data.strip().upper()
+        cmd = msg.data.strip()
         self.get_logger().info(f'Command: {cmd}')
 
-        if cmd == "SCAN":
+        cmd_upper = cmd.upper()
+
+        if cmd_upper == "STOP":
+            self.send_vel(0.0, 0.0)
+            self.state = STATE_IDLE
+            self.publish_status('idle')
+
+        elif cmd_upper == "RETURN_TO_START":
+            self.state = STATE_RETURNING
+            self.goal_reached_flag = False
+            self.publish_status('navigating')
+            
+            # Use the robust position controller from the base node 
+            target = Pose2D()
+            target.x = 0.0
+            target.y = 0.0
+            target.theta = 0.0
+            self.target_pose_pub.publish(target)
+            self.get_logger().info('Sent target_pose (0.0, 0.0, 0.0) for return')
+
+        else:
+            # We treat any other string as an item name to find
+            self.get_logger().info(f'Received item target: {cmd}')
+            
+            # Publish to vision node
+            target_msg = String()
+            target_msg.data = cmd
+            self.target_pub.publish(target_msg)
+            
+            # Auto-start scan
             self.state = STATE_SCANNING
             self.scan_start_time = time.time()
             self.scan_accumulated_theta = 0.0
@@ -204,23 +237,7 @@ class Navigator(Node):
             self.start_x = self.odom_x
             self.start_y = self.odom_y
             self.start_theta = self.odom_theta
-            self.publish_status(STATE_SCANNING)
-
-        elif cmd == "APPROACH":
-            if not self._has_fresh_detection():
-                self.get_logger().warn('No detection — run SCAN first')
-                return
-            self.state = STATE_APPROACHING
-            self.publish_status(STATE_APPROACHING)
-
-        elif cmd == "RETURN":
-            self.state = STATE_RETURNING
-            self.publish_status(STATE_RETURNING)
-
-        elif cmd == "STOP":
-            self.send_vel(0.0, 0.0)
-            self.state = STATE_IDLE
-            self.publish_status(STATE_IDLE)
+            self.publish_status('navigating')
 
     def odom_cb(self, msg: Odometry):
         """
@@ -237,6 +254,10 @@ class Navigator(Node):
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self.odom_theta = math.atan2(siny_cosp, cosy_cosp)
+
+    def goal_reached_cb(self, msg: Bool):
+        if msg.data:
+            self.goal_reached_flag = True
 
     def joint_states_cb(self, msg: JointState):
         """
@@ -255,7 +276,9 @@ class Navigator(Node):
                 idx_th = names.index('joint_th')
                 self.odom_x = positions[idx_x]
                 self.odom_y = positions[idx_y]
-                self.odom_theta = positions[idx_th]
+            
+                # The base_th published to /odom receives a +pi/2 offset inside mujoco_bridge_node.py.
+                self.odom_theta = self._wrap(positions[idx_th] + math.pi/2)
         except (ValueError, IndexError):
             pass
 
@@ -319,8 +342,8 @@ class Navigator(Node):
             self.send_vel(0.0, 0.0)
             self.state = STATE_IDLE
             self._scan_log_count = 0
-            self.get_logger().info(f'Scan: full rotation complete (accumulated {self.scan_accumulated_theta:.2f} rad)')
-            self.publish_status("SCAN_COMPLETE")
+            self.get_logger().info(f'Scan: full rotation complete but target not found.')
+            self.publish_status('failed')
 
     # ═══════════════════════════════════════════════════════════
     #  STEPS D+E: VISUAL SERVO APPROACH
@@ -341,14 +364,18 @@ class Navigator(Node):
                 self.state = STATE_ARRIVED
                 self.get_logger().info(
                     f'ARRIVED — AprilTag depth = {depth:.2f}m < {CLOSE_DEPTH_PNP}m')
-                self.publish_status(STATE_ARRIVED)
+                self.publish_status('arrived')
                 return
 
-        # ── Check stale detection ──
+        # ── Check stale detection (Object Lost) ──
         if not self._has_fresh_detection():
-            # Wait instead of spinning. Spinning causes huge oscillation when redetected.
-            self.get_logger().warn('Detection lost — stopping and waiting for vision...')
+            self.get_logger().warn('Detection lost! Reverting to SCANNING to find it again...')
             self.send_vel(0.0, 0.0)
+            self.state = STATE_SCANNING
+            self.scan_start_time = time.time()
+            self.scan_accumulated_theta = 0.0
+            self.last_scan_theta = self.odom_theta
+            self.publish_status('navigating (resuming scan)')
             return
 
         # ── Visual Servoing with Lag Protection ──
@@ -366,12 +393,12 @@ class Navigator(Node):
         # ── Check if close enough for grasping (Bottom of screen) ──
         # Objects get lower in the image as we get closer.
         # Stop when the center of the object (pixel_y) is near the bottom edge.
-        if pixel_y > IMAGE_HEIGHT - 30:
+        if pixel_y > IMAGE_HEIGHT - 50:
             self.send_vel(0.0, 0.0)
             self.state = STATE_ARRIVED
             self.get_logger().info(
                 f'ARRIVED — grasp position reached (y={pixel_y:.0f})')
-            self.publish_status(STATE_ARRIVED)
+            self.publish_status('arrived')
             return
 
         # ── Proportional control (HW2 P7 pattern) ──
@@ -419,67 +446,17 @@ class Navigator(Node):
     # ═══════════════════════════════════════════════════════════
 
     def do_return(self):
-        # ── Phase 1: If we see the home AprilTag, servo to it ──
-        if self._has_fresh_apriltag():
-            self._return_via_apriltag()
-            return
-
-        # ── Phase 2: Odometry-based navigation (HW2 P7 style) ──
-        self._return_via_odom()
-
-    def _return_via_apriltag(self):
-        """
-        Drive toward home AprilTag using PnP pose.
-        Same proportional control as HW2 P7:
-          angular = Kp * lateral_error
-          linear  = Kp * depth
-        """
-        tx = self.apriltag_pose.position.x   # lateral offset (meters)
-        tz = self.apriltag_pose.position.z   # depth (meters)
-
-        if tz < HOME_ARRIVAL_DEPTH:
-            self.send_vel(0.0, 0.0)
+        # We rely on the /base/target_pose command sent in command_cb.
+        # mujoco_bridge_node.py (and phoenix6_base_node) handles the continuous control internally
+        # and publishes True to /base/goal_reached when it finishes.
+        
+        # NOTE: Any calls to self.send_vel() here would CANCEL the base node's target_pose! 
+        # So we just passively wait for the goal_reached flag.
+        
+        if self.goal_reached_flag:
             self.state = STATE_IDLE
-            self.get_logger().info(f'HOME — AprilTag depth = {tz:.2f}m')
-            self.publish_status("RETURNED")
-            return
-
-        omega = np.clip(-KP_LATERAL * tx, -MAX_ANGULAR_VEL, MAX_ANGULAR_VEL)
-        v = np.clip(KP_FORWARD * tz, 0.0, MAX_LINEAR_VEL)
-        self.send_vel(v, omega)
-
-    def _return_via_odom(self):
-        """
-        Drive toward saved start pose using odometry.
-        Identical to HW2 P7 proportional controller:
-          error = reference_pose - current_pose
-          v = Kp * distance_error
-          omega = Kp * angle_error
-        """
-        dx = self.start_x - self.odom_x
-        dy = self.start_y - self.odom_y
-        dist = math.sqrt(dx*dx + dy*dy)
-
-        if dist < 0.15:
-            # Close enough via odom — spin to look for home AprilTag
-            self.send_vel(0.0, SCAN_ANGULAR_VEL * 0.5)
-            self.get_logger().info('Near home (odom) — searching for AprilTag...')
-            return
-
-        target_angle = math.atan2(dy, dx)
-        angle_err = self._wrap(target_angle - self.odom_theta)
-
-        if abs(angle_err) > 0.2:
-            # Turn first (same logic as HW2 P7 when far from reference)
-            omega = np.clip(KP_ODOM_ANGULAR * angle_err,
-                            -MAX_ANGULAR_VEL, MAX_ANGULAR_VEL)
-            self.send_vel(0.0, omega)
-        else:
-            # Drive + correct
-            v = np.clip(KP_ODOM_LINEAR * dist, 0.0, MAX_LINEAR_VEL)
-            omega = np.clip(KP_ODOM_ANGULAR * angle_err,
-                            -MAX_ANGULAR_VEL, MAX_ANGULAR_VEL)
-            self.send_vel(v, omega)
+            self.publish_status('arrived')
+            self.get_logger().info('ARRIVED HOME (Target Pose Reached)')
 
     # ═══════════════════════════════════════════════════════════
     #  HELPERS
