@@ -50,6 +50,7 @@ import struct
 import math
 import tf2_ros
 import tf2_geometry_msgs
+from scipy.spatial.transform import Rotation as R
 
 # Add submodule paths
 # The node is in ros2_ws/src/tidybot_bringup/scripts/vision-manipulation
@@ -96,7 +97,8 @@ class PointNetGPDNode(Node):
         self.declare_parameter("model_path", os.path.join(POINTNET_ROOT, "data/pointnetgpd_3class.model"))
         self.declare_parameter("config_path", os.path.join(POINTNET_ROOT, "dex-net/test/config.yaml"))
         self.declare_parameter("gripper_dir", os.path.join(POINTNET_ROOT, "dex-net/data/grippers"))
-        self.declare_parameter("rviz_topic", "/detected_grasps/pose")
+        self.declare_parameter("pose_topic", "/detected_grasps/pose")
+        self.declare_parameter("rviz_topic", "/detected_grasps/rviz_pose")
         self.declare_parameter("use_detected_orientation", False)
         self.declare_parameter("send_plan_request", True)
         
@@ -146,7 +148,8 @@ class PointNetGPDNode(Node):
         self.trigger_sub = self.create_subscription(
             RegionOfInterest, "/grasp_pose_request_roi", self.trigger_callback, 1
         )
-        self.pose_pub = self.create_publisher(PoseStamped, self.get_parameter("rviz_topic").get_parameter_value().string_value, 10)
+        self.pose_pub = self.create_publisher(PoseStamped, self.get_parameter("pose_topic").get_parameter_value().string_value, 10)
+        self.rviz_pose_pub = self.create_publisher(PoseStamped, self.get_parameter("rviz_topic").get_parameter_value().string_value, 10)
         
         # --- TF Buffer and Listener ---
         self.tf_buffer = tf2_ros.Buffer()
@@ -220,7 +223,26 @@ class PointNetGPDNode(Node):
             transformed_pose_msg.pose.orientation.w = 0.5
             self.get_logger().info("Using default top-down orientation.")
         else:
-            self.get_logger().info("Using detected orientation from PointNetGPD.")
+            current_quat = [transformed_pose_msg.pose.orientation.x,
+                            transformed_pose_msg.pose.orientation.y,
+                            transformed_pose_msg.pose.orientation.z, 
+                            transformed_pose_msg.pose.orientation.w]
+            r_current = R.from_quat(current_quat)
+
+            # 2. Create a 180-degree rotation around the Z-axis (Yaw)
+            r_flip = R.from_euler('z', 180, degrees=True)
+
+            # 3. Multiply to apply the flip (Local rotation)
+            r_new = r_current * r_flip
+            new_quat = r_new.as_quat()
+
+            # 4. Assign back to your message
+            transformed_pose_msg.pose.orientation.x = new_quat[0]
+            transformed_pose_msg.pose.orientation.y = new_quat[1]
+            transformed_pose_msg.pose.orientation.z = new_quat[2]
+            transformed_pose_msg.pose.orientation.w = new_quat[3]
+        
+            self.get_logger().info("Using detected orientation from PointNetGPD with 180deg Z flip.")
 
         send_plan_request = self.get_parameter("send_plan_request").get_parameter_value().bool_value
         
@@ -239,8 +261,12 @@ class PointNetGPDNode(Node):
             future.add_done_callback(self.planner_response_callback)
         else: # (integrated with next node)
             # Publish to topic for manipulation execution
-            self.get_logger().info(f"Publishing pose to {self.get_parameter("rviz_topic").get_parameter_value().string_value}")
+            self.get_logger().info(f"Publishing pose to {self.get_parameter('pose_topic').get_parameter_value().string_value}")
             self.pose_pub.publish(transformed_pose_msg)
+
+        self.rviz_pose_pub.publish(transformed_pose_msg)
+        self.get_logger().info(f"Publishing pose to {self.get_parameter('rviz_topic').get_parameter_value().string_value} for visualization")
+
 
 
     def planner_response_callback(self, future):
