@@ -112,7 +112,7 @@ GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
 PAUSE_AT_GRASP_SECS = 1        # seconds to hold still at grasp before closing
 
 # ── CHANGE 3: Add gripper min wait to prevent false confirmations ────────────
-GRIPPER_MIN_WAIT = 10.0           # min seconds before checking gripper feedback
+GRIPPER_MIN_WAIT = 2.0           # min seconds before checking gripper feedback
 # ── END CHANGE 3 ────────────────────────────────────────────────────────────
 
 # Safety timeouts (disabled – set very high so we rely on joint feedback only)
@@ -456,7 +456,7 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         elif self.state == "CLOSE_GRIPPER":
             self.gripper_value = GRIPPER_CLOSE
-            if elapsed > GRIPPER_MIN_WAIT or self._gripper_is_closed():
+            if elapsed > GRIPPER_MIN_WAIT and self._gripper_is_closed():
                 fingers = self._get_finger_positions()
                 self.get_logger().info(
                     f"  Gripper confirmed closed (fingers: {fingers})."
