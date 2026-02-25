@@ -209,6 +209,7 @@ Visualization Manager:
     - Class: rviz_default_plugins/TF
       Enabled: true
       Frame Timeout: 15
+<<<<<<< HEAD
       Frames:
         All Enabled: false
         base_link:
@@ -329,6 +330,22 @@ Visualization Manager:
                                   {}
       Update Interval: 0
       Value: true
+=======
+      Marker Scale: 0.3
+
+    - Class: rviz_default_plugins/LaserScan
+      Name: LaserScan
+      Enabled: true
+      Topic:
+        Value: /scan
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Style: Flat Squares
+      Size (Pixels): 3
+      Size (m): 0.01
+      Use Fixed Frame: true
+
+>>>>>>> upstream/main
     - Class: rviz_default_plugins/Image
       Enabled: true
       Max Value: 1
