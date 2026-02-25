@@ -18,6 +18,7 @@
 
     <!-- ADDED: Banana mesh and texture -->
     <mesh name="banana_mesh" file="011_banana/textured.obj" scale="1 1 1"/>
+    <mesh name="banana_collision" file="011_banana/textured_collision.obj" scale="1 1 1"/>
     <texture name="banana_tex" type="2d" file="../meshes/011_banana/texture_map.png"/>
     <material name="banana_mat" texture="banana_tex"/>
   </asset>
@@ -45,8 +46,12 @@
     <!-- ADDED: Banana on top of the block -->
     <body name="banana" pos="0.5 -0.1 0.3">
       <freejoint name="banana_joint"/>
-      <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
-        mass="0.12" friction="7 7 0.5"/>
+      <!-- Visual: full-detail mesh (no collision) -->
+      <geom name="banana_visual" type="mesh" mesh="banana_mesh" material="banana_mat"
+        contype="0" conaffinity="0" mass="0"/>
+      <!-- Collision: decimated convex hull (169 verts) -->
+      <geom name="banana_geom" type="mesh" mesh="banana_collision"
+        mass="0.12" friction="1.0 0.5 0.5" rgba="1 1 0 0"/>
     </body>
   </worldbody>
 
