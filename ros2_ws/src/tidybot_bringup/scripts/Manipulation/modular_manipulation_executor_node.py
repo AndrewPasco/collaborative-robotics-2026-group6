@@ -661,11 +661,11 @@ class ManipulationExecutorNode(Node):
         z = target_pose.position.z
 
         if z > 0.20:
-            joint_targets = [0.0, -0.5, 0.3, 0.0, -0.8, 0.0]
+            joint_targets = [-1.5708, -0.5, 0.3, 0.0, -0.8, 0.0]
         elif z > 0.10:
-            joint_targets = [0.0, 0.2, 0.3, 0.0, -0.5, 0.0]
+            joint_targets = [-1.5708, 0.2, 0.3, 0.0, -0.5, 0.0]
         else:
-            joint_targets = [0.0, 0.5, 0.5, 0.0, -0.2, 0.0]
+            joint_targets = [-1.5708, 0.5, 0.5, 0.0, -0.2, 0.0]
 
         self.get_logger().warn(
             f"  Using HARDCODED fallback IK for z={z:.3f}"
@@ -731,15 +731,16 @@ class ManipulationExecutorNode(Node):
 
         if self.sim_mode:
             # ── Sim test pose ───────────────────────────────────────────
-            # Uses hardcoded IK (z-based joint lookup)
+            # Known reachable pose from test_planner_sim.py demos
             hardcoded.pose.position.x = -0.10
             hardcoded.pose.position.y = -0.35
             hardcoded.pose.position.z = 0.55
 
-            hardcoded.pose.orientation.w = 1.0
-            hardcoded.pose.orientation.x = 0.0
-            hardcoded.pose.orientation.y = 0.0
-            hardcoded.pose.orientation.z = 0.0
+            qw, qx, qy, qz = ORIENT_FINGERS_DOWN
+            hardcoded.pose.orientation.w = qw
+            hardcoded.pose.orientation.x = qx
+            hardcoded.pose.orientation.y = qy
+            hardcoded.pose.orientation.z = qz
         else:
             # ── Real test pose ──────────────────────────────────────────
             # From test_planner_real.py – known reachable with planner
