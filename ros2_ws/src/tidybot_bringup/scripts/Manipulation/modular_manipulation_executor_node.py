@@ -431,7 +431,7 @@ class ManipulationExecutorNode(Node):
         elif self.state == "MOVE_GRASP":
             self.gripper_value = GRIPPER_OPEN
             if not self.arm_cmd_sent:
-                self._send_arm_to_pose(self.grasp_pose, z_offset=0.0)
+                self._send_arm_to_pose(self.grasp_pose, z_offset=0.015)
                 self.arm_cmd_sent = True
             if self._arm_at_target():
                 self.get_logger().info("  Arm arrived at grasp pose.")

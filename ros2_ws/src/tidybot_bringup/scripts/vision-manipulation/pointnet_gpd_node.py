@@ -1,4 +1,39 @@
 #!/usr/bin/env python3
+"""
+PointNetGPD Grasp Detection Node
+
+This node performs 6-DOF grasp detection on point cloud data using PointNetGPD.
+It listens for a Region of Interest (ROI) request, crops the incoming point cloud,
+generates grasp candidates using GPG, scores them with PointNet, and either 
+calls a motion planning service or publishes the best detected grasp.
+
+Subscribed Topics:
+    - /camera/points (sensor_msgs/PointCloud2): Raw point cloud data.
+    - /grasp_pose_request_roi (sensor_msgs/RegionOfInterest): Trigger for grasp detection.
+
+Published Topics:
+    - /detected_grasps/pose (geometry_msgs/PoseStamped): Best detected grasp transformed to base_link.
+      (Active when send_plan_request is False)
+
+Services Called:
+    - /plan_to_target (tidybot_msgs/srv/PlanToTarget): Service to request motion planning to the grasp.
+      (Active when send_plan_request is True)
+
+Parameters:
+    - model_path (string): Path to the trained PointNetGPD model.
+    - config_path (string): Path to the dex-net configuration file.
+    - gripper_dir (string): Path to the directory containing gripper definitions.
+    - rviz_topic (string): Topic for visualizing the detected grasp.
+    - use_detected_orientation (bool): If False, forces a top-down grasp orientation. 
+      If True, uses the full 3D orientation from the model. Default: False.
+    - send_plan_request (bool): If True, calls the /plan_to_target service directly.
+      If False, publishes the pose to the configured topic for coordination. Default: True.
+
+Example Usage:
+    # Use full detected orientation and coordination mode (publishing):
+    ros2 run tidybot_bringup pointnet_gpd_node.py --ros-args \
+        -p use_detected_orientation:=True -p send_plan_request:=False
+"""
 import sys
 import os
 import time
@@ -62,10 +97,13 @@ class PointNetGPDNode(Node):
         self.declare_parameter("config_path", os.path.join(POINTNET_ROOT, "dex-net/test/config.yaml"))
         self.declare_parameter("gripper_dir", os.path.join(POINTNET_ROOT, "dex-net/data/grippers"))
         self.declare_parameter("rviz_topic", "/detected_grasps/pose")
+        self.declare_parameter("use_detected_orientation", False)
+        self.declare_parameter("send_plan_request", True)
         
         model_path = self.get_parameter("model_path").get_parameter_value().string_value
         config_path = self.get_parameter("config_path").get_parameter_value().string_value
         gripper_dir = self.get_parameter("gripper_dir").get_parameter_value().string_value
+        self.use_detected_orientation = self.get_parameter("use_detected_orientation").get_parameter_value().bool_value
         
         # --- Load Model ---
         self.get_logger().info(f"Loading model from {model_path}...")
@@ -167,33 +205,43 @@ class PointNetGPDNode(Node):
         except Exception as e:
             self.get_logger().error(f"Could not transform grasp from {grasp_msg.header.frame_id} to {target_frame}: {e}")
             return
+        
+        # Check if we should use the detected orientation or the default top-down
+        # We refresh the parameter in case it was changed via 'ros2 param set'
+        use_detected = self.get_parameter("use_detected_orientation").get_parameter_value().bool_value
 
+        if not use_detected:
+            # Default to a top-down grasp orientation (fingers pointing down)
+            # In base_link frame, this corresponds to:
+            # qw=0.5, qx=0.5, qy=0.5, qz=-0.5
+            transformed_pose_msg.pose.orientation.x = 0.5
+            transformed_pose_msg.pose.orientation.y = 0.5
+            transformed_pose_msg.pose.orientation.z = -0.5
+            transformed_pose_msg.pose.orientation.w = 0.5
+            self.get_logger().info("Using default top-down orientation.")
+        else:
+            self.get_logger().info("Using detected orientation from PointNetGPD.")
 
-        # 2. Prepare and send request
-        req = PlanToTarget.Request()
-        req.arm_name = "right" # Default to right arm
+        send_plan_request = self.get_parameter("send_plan_request").get_parameter_value().bool_value
         
-        # Default to a top-down grasp orientation (fingers pointing down)
-        # In base_link frame, this corresponds to:
-        # qw=0.5, qx=0.5, qy=0.5, qz=-0.5
-        transformed_pose_msg.pose.orientation.x = 0.5
-        transformed_pose_msg.pose.orientation.y = 0.5
-        transformed_pose_msg.pose.orientation.z = -0.5
-        transformed_pose_msg.pose.orientation.w = 0.5
+        if send_plan_request: # (debug)
+            # Prepare and send request
+            req = PlanToTarget.Request()
+            req.arm_name = "right" # Default to right arm
+            req.target_pose = transformed_pose_msg.pose
+            req.use_orientation = True
+            req.execute = False # change this to use the default planner
+            req.duration = 2.0
+            
+            self.get_logger().info(f"Sending plan request to {req.arm_name} arm...")
+            # Call asynchronously
+            future = self.plan_client.call_async(req)
+            future.add_done_callback(self.planner_response_callback)
+        else: # (integrated with next node)
+            # Publish to topic for manipulation execution
+            self.get_logger().info(f"Publishing pose to {self.get_parameter("rviz_topic").get_parameter_value().string_value}")
+            self.pose_pub.publish(transformed_pose_msg)
 
-        # Publish to topic for manipulation execution
-        self.pose_pub.publish(transformed_pose_msg)
-        
-        req.target_pose = transformed_pose_msg.pose
-        req.use_orientation = True
-        req.execute = False
-        req.duration = 2.0
-        
-        self.get_logger().info(f"Sending plan request to {req.arm_name} arm (using top-down orientation)...")
-        
-        # Call asynchronously
-        # future = self.plan_client.call_async(req)
-        # future.add_done_callback(self.planner_response_callback)
 
     def planner_response_callback(self, future):
         try:

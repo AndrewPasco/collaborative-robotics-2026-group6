@@ -47,7 +47,8 @@ if [ -d "$POINTNET_ROOT" ]; then
     
     # PyTorch (CPU) and Open3D
     print_status "Installing PyTorch (CPU) and Open3D..."
-    uv pip install open3d torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    uv add open3d
+    uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
     
     # Compatibility fixes for legacy dex-net code
     print_status "Applying version compatibility fixes..."
