@@ -408,7 +408,7 @@ class ManipulationExecutorNode(Node):
             self.gripper_value = GRIPPER_OPEN
             if elapsed > GRIPPER_MIN_WAIT and self._gripper_is_open():
                 self.get_logger().info("  Gripper confirmed open.")
-                self._advance("MOVE_GRASP")
+                self._advance("MOVE_PREGRASP")
         # ── END CHANGE 11 ───────────────────────────────────────────────
 
         # =================================================================
@@ -514,12 +514,12 @@ class ManipulationExecutorNode(Node):
     def _log_state(self):
         """Log a message when entering a new state."""
         messages = {
-            "OPEN_GRIPPER":   "Step 1/5 – Opening gripper (waiting for confirmation) …",
-            "MOVE_PREGRASP":  "Step 2/5 – Moving to PRE-GRASP (waiting for arm arrival) …",
-            "MOVE_GRASP":     "Step 3/5 – Descending to GRASP (waiting for arm arrival) …",
-            "PAUSE_AT_GRASP": f"Step 4/5 – At grasp pose. Holding open for {PAUSE_AT_GRASP_SECS}s …",
-            "CLOSE_GRIPPER":  "Step 4/5 – Closing gripper (waiting for confirmation) …",
-            "MOVE_LIFT":      "Step 5/5 – LIFTING (waiting for arm arrival) …",
+            "OPEN_GRIPPER":   "Step 1/6 – Opening gripper (waiting for confirmation) …",
+            "MOVE_PREGRASP":  "Step 2/6 – Moving to PRE-GRASP (waiting for arm arrival) …",
+            "MOVE_GRASP":     "Step 3/6 – Descending to GRASP (waiting for arm arrival) …",
+            "PAUSE_AT_GRASP": f"Step 4/6 – At grasp pose. Holding open for {PAUSE_AT_GRASP_SECS}s …",
+            "CLOSE_GRIPPER":  "Step 5/6 – Closing gripper (waiting for confirmation) …",
+            "MOVE_LIFT":      "Step 6/6 – LIFTING (waiting for arm arrival) …",
             "DONE":           "Done!",
         }
         self.get_logger().info(messages.get(self.state, f"State: {self.state}"))
