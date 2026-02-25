@@ -91,3 +91,6 @@ echo "Environment ready!"
 echo "  Python: $(which python3) (ROS2 system Python)"
 echo "  uv packages available via PYTHONPATH"
 echo ""
+
+export ROS_DOMAIN_ID=42
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
