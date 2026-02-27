@@ -43,6 +43,7 @@ from geometry_msgs.msg import Point, Pose
 from std_msgs.msg import String
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy, qos_profile_sensor_data
 from cv_bridge import CvBridge
+from std_msgs.msg import Int32MultiArray
 
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURATION
@@ -113,6 +114,17 @@ class VisionYoloGemini(Node):
             String, '/vision/detections', 10)
         self.annotated_pub = self.create_publisher(
             Image, '/vision/annotated_image', 10)
+        self.target_bbox_pub = self.create_publisher(
+            Int32MultiArray,
+            '/vision/target_bbox',
+            10
+        )
+
+        self.class_id_map = {
+            "bottle": 0,
+            "cap": 1,
+            "banana": 2
+        }
 
         self.cv_bridge = CvBridge()
 
@@ -432,6 +444,23 @@ Image dimensions are 640x480. Give pixel coordinates."""
             det.y = float(best['cy'])
             det.z = float(best['area'])
             self.detection_pub.publish(det)
+
+
+            # ── For Pasco: Publish bbox + class id ──
+            x1, y1, x2, y2 = best['bbox']
+            cx = int(best['cx'])
+            cy = int(best['cy'])
+            w = int(x2 - x1)
+            h = int(y2 - y1)
+
+            class_name = best.get("class", "").lower()
+            class_id = self.class_id_map.get(class_name, -1)
+
+            bbox_msg = Int32MultiArray()
+            bbox_msg.data = [cx, cy, w, h, class_id]
+            self.target_bbox_pub.publish(bbox_msg)
+
+
             # Log when we publish a detection (once per second max)
             import time as _t
             _now = _t.time()
