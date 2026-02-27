@@ -70,7 +70,7 @@ To trigger a grasp detection, publish a `RegionOfInterest` message. This crops t
 
 Use test pub below for center of image, offset slightly down in y.
 ```bash
-ros2 topic pub --once /grasp_pose_request_roi sensor_msgs/msg/RegionOfInterest "{x_offset: 240, y_offset: 200, width: 160, height: 160, do_rectify: false}"
+x
 ```
 
 Note for testing: z (camera optical axis, +z is out) is currently set to 0.1-0.5 threshold, see `pointnet_gpd_node.py` for more / to change this.
