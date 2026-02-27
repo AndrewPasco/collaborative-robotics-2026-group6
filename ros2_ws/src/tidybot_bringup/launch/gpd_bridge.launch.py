@@ -68,7 +68,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{
             'use_detected_orientation': use_detected_orientation,
             'send_plan_request': send_plan_request,
-            'rviz_topic': rviz_topic,
+            'rviz_topic': rviz_topic
         }]
     )
 
@@ -86,11 +86,11 @@ def generate_launch_description():
             description='If True, use detected orientation from PointNetGPD. If False, force top-down.'
         ),
         DeclareLaunchArgument(
-            'send_plan_request', default_value='true',
+            'send_plan_request', default_value='false',
             description='If True, calls /plan_to_target. If False, publishes to topic.'
         ),
         DeclareLaunchArgument(
-            'rviz_topic', default_value='/detected_grasps/pose',
+            'rviz_topic', default_value='/detected_grasps/rviz_pose',
             description='Topic for visualizing/publishing the detected grasp.'
         ),
         OpaqueFunction(function=launch_setup)

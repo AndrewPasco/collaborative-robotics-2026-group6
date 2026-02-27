@@ -100,7 +100,7 @@ class PointNetGPDNode(Node):
         self.declare_parameter("pose_topic", "/detected_grasps/pose")
         self.declare_parameter("rviz_topic", "/detected_grasps/rviz_pose")
         self.declare_parameter("use_detected_orientation", False)
-        self.declare_parameter("send_plan_request", True)
+        self.declare_parameter("send_plan_request", False)
         
         model_path = self.get_parameter("model_path").get_parameter_value().string_value
         config_path = self.get_parameter("config_path").get_parameter_value().string_value
