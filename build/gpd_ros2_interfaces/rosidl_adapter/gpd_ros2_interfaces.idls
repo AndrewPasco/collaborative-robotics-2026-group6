@@ -1,7 +1,0 @@
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/CloudIndexed.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/CloudSamples.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/CloudSources.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/GraspConfig.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/GraspConfigList.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:msg/SamplesMsg.idl
-/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/rosidl_adapter/gpd_ros2_interfaces:srv/DetectGrasps.idl

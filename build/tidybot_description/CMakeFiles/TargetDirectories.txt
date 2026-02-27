@@ -1,9 +1,0 @@
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/uninstall.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/tidybot_description_uninstall.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/test.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/edit_cache.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/rebuild_cache.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/list_install_components.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/install.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/install/local.dir
-/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_description/CMakeFiles/install/strip.dir

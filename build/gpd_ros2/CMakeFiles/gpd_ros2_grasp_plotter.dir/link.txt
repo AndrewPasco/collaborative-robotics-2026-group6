@@ -1,2 +1,0 @@
-/usr/bin/ar qc libgpd_ros2_grasp_plotter.a CMakeFiles/gpd_ros2_grasp_plotter.dir/src/gpd_ros2/grasp_plotter.cpp.o
-/usr/bin/ranlib libgpd_ros2_grasp_plotter.a

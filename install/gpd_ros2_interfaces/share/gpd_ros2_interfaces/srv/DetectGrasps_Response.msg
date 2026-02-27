@@ -1,2 +1,0 @@
-
-gpd_ros2_interfaces/GraspConfigList grasp_configs
