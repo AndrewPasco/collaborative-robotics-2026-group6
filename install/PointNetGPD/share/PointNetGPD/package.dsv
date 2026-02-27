@@ -1,0 +1,3 @@
+source;share/PointNetGPD/hook/pythonpath.ps1
+source;share/PointNetGPD/hook/pythonpath.dsv
+source;share/PointNetGPD/hook/pythonpath.sh

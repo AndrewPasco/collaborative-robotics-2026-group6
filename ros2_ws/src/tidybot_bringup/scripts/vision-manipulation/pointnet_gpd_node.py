@@ -214,14 +214,25 @@ class PointNetGPDNode(Node):
         use_detected = self.get_parameter("use_detected_orientation").get_parameter_value().bool_value
 
         if not use_detected:
-            # Default to a top-down grasp orientation (fingers pointing down)
+            # Default to a top-down grasp orientation (fingers pointing down), 70 degree rotation
             # In base_link frame, this corresponds to:
             # qw=0.5, qx=0.5, qy=0.5, qz=-0.5
-            transformed_pose_msg.pose.orientation.x = 0.5
-            transformed_pose_msg.pose.orientation.y = 0.5
-            transformed_pose_msg.pose.orientation.z = -0.5
-            transformed_pose_msg.pose.orientation.w = 0.5
-            self.get_logger().info("Using default top-down orientation.")
+            current_quat = [0.5, 0.5, -0.5, 0.5]
+            r_current = R.from_quat(current_quat)
+
+            # 2. Create a 70-degree rotation around the yaw axis (Yaw)
+            r_flip = R.from_euler('X', 70, degrees=True)
+
+            # 3. Multiply to apply the flip (Local rotation)
+            r_new = r_current * r_flip
+            new_quat = r_new.as_quat()
+
+            # 4. Assign back to your message
+            transformed_pose_msg.pose.orientation.x = new_quat[0]
+            transformed_pose_msg.pose.orientation.y = new_quat[1]
+            transformed_pose_msg.pose.orientation.z = new_quat[2]
+            transformed_pose_msg.pose.orientation.w = new_quat[3]
+            self.get_logger().info("Using default top-down orientation, 70 degree rotation.")
         else:
             current_quat = [transformed_pose_msg.pose.orientation.x,
                             transformed_pose_msg.pose.orientation.y,

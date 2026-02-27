@@ -1,0 +1,28 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from gpd_ros2_interfaces/msg/CloudSources.msg
+// generated code does not contain a copyright notice
+
+#include "geometry_msgs/msg/Point.idl"
+#include "sensor_msgs/msg/PointCloud2.idl"
+
+module gpd_ros2_interfaces {
+  module msg {
+    @verbatim (language="comment", text=
+      "This message holds a point cloud that can be a combination of point clouds " "\n"
+      "from different camera sources (at least one). For each point in the cloud, " "\n"
+      "this message also stores the index of the camera that produced the point.")
+    struct CloudSources {
+      @verbatim (language="comment", text=
+        "The point cloud.")
+      sensor_msgs::msg::PointCloud2 cloud;
+
+      @verbatim (language="comment", text=
+        "For each point in the cloud, the index of the camera that acquired the point.")
+      sequence<int64> camera_source;
+
+      @verbatim (language="comment", text=
+        "A list of camera positions at which the point cloud was acquired.")
+      sequence<geometry_msgs::msg::Point> view_points;
+    };
+  };
+};

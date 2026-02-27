@@ -1,0 +1,133 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-64c71584bceac1617c5e.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "gpd_ros2",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "detect_grasps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-detect_grasps-3bba7d0d3ba832eb5e82.json",
+					"name" : "detect_grasps",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "detect_grasps_server::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-detect_grasps_server-3d51702403c1c3f1f627.json",
+					"name" : "detect_grasps_server",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_grasp_messages::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_grasp_messages-c76ff5a90a404d14aa85.json",
+					"name" : "gpd_ros2_grasp_messages",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_grasp_plotter::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_grasp_plotter-ff25d506203e537d5c12.json",
+					"name" : "gpd_ros2_grasp_plotter",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_uninstall-f26d9108e804b43b3f28.json",
+					"name" : "gpd_ros2_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "mask2gpd::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-mask2gpd-c5f9a5999f2df778d839.json",
+					"name" : "mask2gpd",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "pcd_publisher::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-pcd_publisher-c07601ce0fe53f52e0e7.json",
+					"name" : "pcd_publisher",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "pcd_service_client::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-pcd_service_client-ce3baae7f8d23c0842f4.json",
+					"name" : "pcd_service_client",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-f35fce9db72ef811d3d7.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2",
+		"source" : "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

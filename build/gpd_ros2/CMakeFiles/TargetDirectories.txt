@@ -1,0 +1,16 @@
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/uninstall.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/gpd_ros2_uninstall.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/gpd_ros2_grasp_messages.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/gpd_ros2_grasp_plotter.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/detect_grasps.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/detect_grasps_server.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/pcd_publisher.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/pcd_service_client.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/mask2gpd.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/test.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/edit_cache.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/rebuild_cache.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/list_install_components.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/install.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/install/local.dir
+/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2/CMakeFiles/install/strip.dir

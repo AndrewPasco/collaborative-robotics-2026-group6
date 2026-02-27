@@ -1,0 +1,17 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from gpd_ros2_interfaces/srv/DetectGrasps.srv
+// generated code does not contain a copyright notice
+
+#include "gpd_ros2_interfaces/msg/CloudIndexed.idl"
+#include "gpd_ros2_interfaces/msg/GraspConfigList.idl"
+
+module gpd_ros2_interfaces {
+  module srv {
+    struct DetectGrasps_Request {
+      gpd_ros2_interfaces::msg::CloudIndexed cloud_indexed;
+    };
+    struct DetectGrasps_Response {
+      gpd_ros2_interfaces::msg::GraspConfigList grasp_configs;
+    };
+  };
+};

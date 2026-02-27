@@ -1,0 +1,22 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from gpd_ros2_interfaces/msg/GraspConfigList.msg
+// generated code does not contain a copyright notice
+
+#include "gpd_ros2_interfaces/msg/GraspConfig.idl"
+#include "std_msgs/msg/Header.idl"
+
+module gpd_ros2_interfaces {
+  module msg {
+    @verbatim (language="comment", text=
+      "This message stores a list of grasp configurations.")
+    struct GraspConfigList {
+      @verbatim (language="comment", text=
+        "The time of acquisition, and the coordinate frame ID.")
+      std_msgs::msg::Header header;
+
+      @verbatim (language="comment", text=
+        "The list of grasp configurations.")
+      sequence<gpd_ros2_interfaces::msg::GraspConfig> grasps;
+    };
+  };
+};

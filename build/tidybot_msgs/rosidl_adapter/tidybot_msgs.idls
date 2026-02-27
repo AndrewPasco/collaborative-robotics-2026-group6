@@ -1,0 +1,9 @@
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:msg/ArmCommand.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:msg/ArmVelocityCommand.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:msg/CartesianVelocityCommand.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:msg/GripperCommand.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:msg/PanTilt.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:srv/SolveIK.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:srv/GetJointState.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:srv/PlanToTarget.idl
+/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/rosidl_adapter/tidybot_msgs:srv/AudioRecord.idl

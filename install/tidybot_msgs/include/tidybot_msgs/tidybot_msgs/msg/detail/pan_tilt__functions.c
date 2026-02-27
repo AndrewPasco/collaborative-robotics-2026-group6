@@ -1,0 +1,267 @@
+// generated from rosidl_generator_c/resource/idl__functions.c.em
+// with input from tidybot_msgs:msg/PanTilt.idl
+// generated code does not contain a copyright notice
+#include "tidybot_msgs/msg/detail/pan_tilt__functions.h"
+
+#include <assert.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "rcutils/allocator.h"
+
+
+// Include directives for member types
+// Member `header`
+#include "std_msgs/msg/detail/header__functions.h"
+
+bool
+tidybot_msgs__msg__PanTilt__init(tidybot_msgs__msg__PanTilt * msg)
+{
+  if (!msg) {
+    return false;
+  }
+  // header
+  if (!std_msgs__msg__Header__init(&msg->header)) {
+    tidybot_msgs__msg__PanTilt__fini(msg);
+    return false;
+  }
+  // pan
+  // tilt
+  return true;
+}
+
+void
+tidybot_msgs__msg__PanTilt__fini(tidybot_msgs__msg__PanTilt * msg)
+{
+  if (!msg) {
+    return;
+  }
+  // header
+  std_msgs__msg__Header__fini(&msg->header);
+  // pan
+  // tilt
+}
+
+bool
+tidybot_msgs__msg__PanTilt__are_equal(const tidybot_msgs__msg__PanTilt * lhs, const tidybot_msgs__msg__PanTilt * rhs)
+{
+  if (!lhs || !rhs) {
+    return false;
+  }
+  // header
+  if (!std_msgs__msg__Header__are_equal(
+      &(lhs->header), &(rhs->header)))
+  {
+    return false;
+  }
+  // pan
+  if (lhs->pan != rhs->pan) {
+    return false;
+  }
+  // tilt
+  if (lhs->tilt != rhs->tilt) {
+    return false;
+  }
+  return true;
+}
+
+bool
+tidybot_msgs__msg__PanTilt__copy(
+  const tidybot_msgs__msg__PanTilt * input,
+  tidybot_msgs__msg__PanTilt * output)
+{
+  if (!input || !output) {
+    return false;
+  }
+  // header
+  if (!std_msgs__msg__Header__copy(
+      &(input->header), &(output->header)))
+  {
+    return false;
+  }
+  // pan
+  output->pan = input->pan;
+  // tilt
+  output->tilt = input->tilt;
+  return true;
+}
+
+tidybot_msgs__msg__PanTilt *
+tidybot_msgs__msg__PanTilt__create()
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  tidybot_msgs__msg__PanTilt * msg = (tidybot_msgs__msg__PanTilt *)allocator.allocate(sizeof(tidybot_msgs__msg__PanTilt), allocator.state);
+  if (!msg) {
+    return NULL;
+  }
+  memset(msg, 0, sizeof(tidybot_msgs__msg__PanTilt));
+  bool success = tidybot_msgs__msg__PanTilt__init(msg);
+  if (!success) {
+    allocator.deallocate(msg, allocator.state);
+    return NULL;
+  }
+  return msg;
+}
+
+void
+tidybot_msgs__msg__PanTilt__destroy(tidybot_msgs__msg__PanTilt * msg)
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  if (msg) {
+    tidybot_msgs__msg__PanTilt__fini(msg);
+  }
+  allocator.deallocate(msg, allocator.state);
+}
+
+
+bool
+tidybot_msgs__msg__PanTilt__Sequence__init(tidybot_msgs__msg__PanTilt__Sequence * array, size_t size)
+{
+  if (!array) {
+    return false;
+  }
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  tidybot_msgs__msg__PanTilt * data = NULL;
+
+  if (size) {
+    data = (tidybot_msgs__msg__PanTilt *)allocator.zero_allocate(size, sizeof(tidybot_msgs__msg__PanTilt), allocator.state);
+    if (!data) {
+      return false;
+    }
+    // initialize all array elements
+    size_t i;
+    for (i = 0; i < size; ++i) {
+      bool success = tidybot_msgs__msg__PanTilt__init(&data[i]);
+      if (!success) {
+        break;
+      }
+    }
+    if (i < size) {
+      // if initialization failed finalize the already initialized array elements
+      for (; i > 0; --i) {
+        tidybot_msgs__msg__PanTilt__fini(&data[i - 1]);
+      }
+      allocator.deallocate(data, allocator.state);
+      return false;
+    }
+  }
+  array->data = data;
+  array->size = size;
+  array->capacity = size;
+  return true;
+}
+
+void
+tidybot_msgs__msg__PanTilt__Sequence__fini(tidybot_msgs__msg__PanTilt__Sequence * array)
+{
+  if (!array) {
+    return;
+  }
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+
+  if (array->data) {
+    // ensure that data and capacity values are consistent
+    assert(array->capacity > 0);
+    // finalize all array elements
+    for (size_t i = 0; i < array->capacity; ++i) {
+      tidybot_msgs__msg__PanTilt__fini(&array->data[i]);
+    }
+    allocator.deallocate(array->data, allocator.state);
+    array->data = NULL;
+    array->size = 0;
+    array->capacity = 0;
+  } else {
+    // ensure that data, size, and capacity values are consistent
+    assert(0 == array->size);
+    assert(0 == array->capacity);
+  }
+}
+
+tidybot_msgs__msg__PanTilt__Sequence *
+tidybot_msgs__msg__PanTilt__Sequence__create(size_t size)
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  tidybot_msgs__msg__PanTilt__Sequence * array = (tidybot_msgs__msg__PanTilt__Sequence *)allocator.allocate(sizeof(tidybot_msgs__msg__PanTilt__Sequence), allocator.state);
+  if (!array) {
+    return NULL;
+  }
+  bool success = tidybot_msgs__msg__PanTilt__Sequence__init(array, size);
+  if (!success) {
+    allocator.deallocate(array, allocator.state);
+    return NULL;
+  }
+  return array;
+}
+
+void
+tidybot_msgs__msg__PanTilt__Sequence__destroy(tidybot_msgs__msg__PanTilt__Sequence * array)
+{
+  rcutils_allocator_t allocator = rcutils_get_default_allocator();
+  if (array) {
+    tidybot_msgs__msg__PanTilt__Sequence__fini(array);
+  }
+  allocator.deallocate(array, allocator.state);
+}
+
+bool
+tidybot_msgs__msg__PanTilt__Sequence__are_equal(const tidybot_msgs__msg__PanTilt__Sequence * lhs, const tidybot_msgs__msg__PanTilt__Sequence * rhs)
+{
+  if (!lhs || !rhs) {
+    return false;
+  }
+  if (lhs->size != rhs->size) {
+    return false;
+  }
+  for (size_t i = 0; i < lhs->size; ++i) {
+    if (!tidybot_msgs__msg__PanTilt__are_equal(&(lhs->data[i]), &(rhs->data[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool
+tidybot_msgs__msg__PanTilt__Sequence__copy(
+  const tidybot_msgs__msg__PanTilt__Sequence * input,
+  tidybot_msgs__msg__PanTilt__Sequence * output)
+{
+  if (!input || !output) {
+    return false;
+  }
+  if (output->capacity < input->size) {
+    const size_t allocation_size =
+      input->size * sizeof(tidybot_msgs__msg__PanTilt);
+    rcutils_allocator_t allocator = rcutils_get_default_allocator();
+    tidybot_msgs__msg__PanTilt * data =
+      (tidybot_msgs__msg__PanTilt *)allocator.reallocate(
+      output->data, allocation_size, allocator.state);
+    if (!data) {
+      return false;
+    }
+    // If reallocation succeeded, memory may or may not have been moved
+    // to fulfill the allocation request, invalidating output->data.
+    output->data = data;
+    for (size_t i = output->capacity; i < input->size; ++i) {
+      if (!tidybot_msgs__msg__PanTilt__init(&output->data[i])) {
+        // If initialization of any new item fails, roll back
+        // all previously initialized items. Existing items
+        // in output are to be left unmodified.
+        for (; i-- > output->capacity; ) {
+          tidybot_msgs__msg__PanTilt__fini(&output->data[i]);
+        }
+        return false;
+      }
+    }
+    output->capacity = input->size;
+  }
+  output->size = input->size;
+  for (size_t i = 0; i < input->size; ++i) {
+    if (!tidybot_msgs__msg__PanTilt__copy(
+        &(input->data[i]), &(output->data[i])))
+    {
+      return false;
+    }
+  }
+  return true;
+}

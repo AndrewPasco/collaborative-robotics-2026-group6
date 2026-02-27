@@ -40,12 +40,12 @@
     <body name="block" pos="0.55 -0.05 0.25">
       <!-- <freejoint name="block_joint"/> -->
       <geom name="block_geom" type="box" size="0.17 0.17 0.01" mass="0.1" material="block_material"
-        friction="1.0 0.5 0.5" solref="0.01 1" solimp="5 5 0.001"/>
+        friction="1.0 1.0 1.0"/>
     </body>
 
     <!-- ADDED: Banana on top of the block -->
     <body name="banana" pos="0.5 -0.1 0.3">
-      <freejoint name="banana_joint"/>
+      <!-- <freejoint name="banana_joint"/> -->
       <!-- Visual: full-detail mesh (no collision) -->
       <geom name="banana_visual" type="mesh" mesh="banana_mesh" material="banana_mat"
         contype="0" conaffinity="0" mass="0"/>
@@ -61,8 +61,7 @@
     <key name="home" qpos="0 0 1.5708                                      
     0 0                                                                  
     0 0 0 0 0 0 0.037 0.037                                              
-    0 0 0 0 0 0 0.037 0.037                                              
-    0.5 -0.1 0.3 1 0 0 0"                                                
+    0 0 0 0 0 0 0.037 0.037"                                                                                              
     ctrl="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037"/>                                                                         
   </keyframe>
 

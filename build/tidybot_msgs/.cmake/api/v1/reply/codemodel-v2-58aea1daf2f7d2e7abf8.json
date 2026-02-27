@@ -1,0 +1,233 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-420c09663a88ff77ded8.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17
+					]
+				},
+				{
+					"build" : "tidybot_msgs__py",
+					"jsonFile" : "directory-tidybot_msgs__py-c00f525ab0a938ad2dad.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs/tidybot_msgs__py",
+					"targetIndexes" : 
+					[
+						4
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1
+					],
+					"name" : "tidybot_msgs",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_build_tidybot_msgs_egg::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_build_tidybot_msgs_egg-c4fdd16943a4d878e006.json",
+					"name" : "ament_cmake_python_build_tidybot_msgs_egg",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_copy_tidybot_msgs::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_copy_tidybot_msgs-032f6fd5d53857e28868.json",
+					"name" : "ament_cmake_python_copy_tidybot_msgs",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs-5cca329751e87ba765d6.json",
+					"name" : "tidybot_msgs",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__cpp-d0713870eb0e1053c864.json",
+					"name" : "tidybot_msgs__cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "tidybot_msgs__py::@9d5cb827cf21adc5f02c",
+					"jsonFile" : "target-tidybot_msgs__py-92ae26be10c6c6fdd63f.json",
+					"name" : "tidybot_msgs__py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_generator_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_generator_c-be21874c88c3a69132d1.json",
+					"name" : "tidybot_msgs__rosidl_generator_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_generator_py::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_generator_py-b29d36a9eedd09caf463.json",
+					"name" : "tidybot_msgs__rosidl_generator_py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_c-4b5a49e2b0ac9b1362d7.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_c__pyext-1b3cb4a80e20f4959875.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_cpp-d9eadbbd04cd5bbaebc0.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_fastrtps_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_fastrtps_c-671d507bfa346b8070cd.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_fastrtps_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_fastrtps_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_fastrtps_c__pyext-669bec89ccca05fcb21e.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_fastrtps_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_fastrtps_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_fastrtps_cpp-b6835328527f510bb8bd.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_fastrtps_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_introspection_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_introspection_c-bf90c3a2b000b4e3b394.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_introspection_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_introspection_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_introspection_c__pyext-7bb9cd84ecfad424e2bc.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_introspection_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs__rosidl_typesupport_introspection_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs__rosidl_typesupport_introspection_cpp-6d7769327d0669b67b53.json",
+					"name" : "tidybot_msgs__rosidl_typesupport_introspection_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "tidybot_msgs_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-tidybot_msgs_uninstall-4ad464ed2072400de658.json",
+					"name" : "tidybot_msgs_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-2b88f0ee19b67b8ae2e7.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/apasco/me326/collaborative-robotics-2026-group6/build/tidybot_msgs",
+		"source" : "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/tidybot_msgs"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

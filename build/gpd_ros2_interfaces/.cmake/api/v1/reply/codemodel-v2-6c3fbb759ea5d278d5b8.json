@@ -1,0 +1,233 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-9bb05b696ab9e9238460.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17
+					]
+				},
+				{
+					"build" : "gpd_ros2_interfaces__py",
+					"jsonFile" : "directory-gpd_ros2_interfaces__py-63d5270f5ed4dbe6cdde.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces/gpd_ros2_interfaces__py",
+					"targetIndexes" : 
+					[
+						4
+					]
+				}
+			],
+			"name" : "",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1
+					],
+					"name" : "gpd_ros2_interfaces",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_build_gpd_ros2_interfaces_egg::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_build_gpd_ros2_interfaces_egg-720e62aec9073a90a23e.json",
+					"name" : "ament_cmake_python_build_gpd_ros2_interfaces_egg",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "ament_cmake_python_copy_gpd_ros2_interfaces::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-ament_cmake_python_copy_gpd_ros2_interfaces-40ae134c7a52af4e85d0.json",
+					"name" : "ament_cmake_python_copy_gpd_ros2_interfaces",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces-69ac7ee65dac3234d91a.json",
+					"name" : "gpd_ros2_interfaces",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__cpp-6945233035bd6a1fde9d.json",
+					"name" : "gpd_ros2_interfaces__cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "gpd_ros2_interfaces__py::@e70f8f92cae559269dd0",
+					"jsonFile" : "target-gpd_ros2_interfaces__py-e508223638d235cabdf5.json",
+					"name" : "gpd_ros2_interfaces__py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_generator_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_generator_c-68d25612fc4e3a7b4d23.json",
+					"name" : "gpd_ros2_interfaces__rosidl_generator_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_generator_py::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_generator_py-d03d827430f290570677.json",
+					"name" : "gpd_ros2_interfaces__rosidl_generator_py",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_c-0c5cad4b1b2e8dddb7bd.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_c__pyext-a0900aba6c1e73b572ef.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_cpp-82713ba748cdc960994f.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c-33071278d8eaaab4c408.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c__pyext-af2490c183c53ea68ffb.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_fastrtps_cpp-f0daa0e1ef0c0901e880.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_fastrtps_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_c::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_introspection_c-495d437ad644a026d9c8.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_c",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_c__pyext::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_introspection_c__pyext-1dd5584589d0e11c38c3.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_c__pyext",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_cpp::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces__rosidl_typesupport_introspection_cpp-f590199e0a20530b3c6d.json",
+					"name" : "gpd_ros2_interfaces__rosidl_typesupport_introspection_cpp",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gpd_ros2_interfaces_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gpd_ros2_interfaces_uninstall-6331ad4d3ab63019dc45.json",
+					"name" : "gpd_ros2_interfaces_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-da02509c27b5ad84c7d4.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/apasco/me326/collaborative-robotics-2026-group6/build/gpd_ros2_interfaces",
+		"source" : "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

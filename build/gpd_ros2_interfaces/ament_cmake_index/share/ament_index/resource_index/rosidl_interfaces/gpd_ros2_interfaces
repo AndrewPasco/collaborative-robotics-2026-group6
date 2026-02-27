@@ -1,0 +1,16 @@
+msg/CloudIndexed.idl
+msg/CloudIndexed.msg
+msg/CloudSamples.idl
+msg/CloudSamples.msg
+msg/CloudSources.idl
+msg/CloudSources.msg
+msg/GraspConfig.idl
+msg/GraspConfig.msg
+msg/GraspConfigList.idl
+msg/GraspConfigList.msg
+msg/SamplesMsg.idl
+msg/SamplesMsg.msg
+srv/DetectGrasps.idl
+srv/DetectGrasps.srv
+srv/DetectGrasps_Request.msg
+srv/DetectGrasps_Response.msg

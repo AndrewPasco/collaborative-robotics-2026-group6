@@ -1,0 +1,12 @@
+{
+  "package_name": "gpd_ros2_interfaces",
+  "non_idl_tuples": [
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/CloudIndexed.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/CloudSamples.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/CloudSources.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/GraspConfig.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/GraspConfigList.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:msg/SamplesMsg.msg",
+    "/home/apasco/me326/collaborative-robotics-2026-group6/ros2_ws/src/grasp_detection_ros2/gpd_ros2_interfaces:srv/DetectGrasps.srv"
+  ]
+}

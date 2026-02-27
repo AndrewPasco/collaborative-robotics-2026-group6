@@ -1,0 +1,2 @@
+/usr/bin/ar qc libgpd_ros2_grasp_messages.a CMakeFiles/gpd_ros2_grasp_messages.dir/src/gpd_ros2/grasp_messages.cpp.o
+/usr/bin/ranlib libgpd_ros2_grasp_messages.a
