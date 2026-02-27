@@ -41,6 +41,8 @@ install(PROGRAMS
   scripts/Manipulation/manipulation_executor_node.py
   scripts/vision-manipulation/grasp_trigger_node.py
   scripts/vision-manipulation/pointnet_gpd_node.py
+  scripts/Navigation/navigator.py
+  scripts/Navigation/vision_yolo_gemini.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
