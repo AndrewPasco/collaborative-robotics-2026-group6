@@ -27,11 +27,11 @@ git submodule update --init --recursive
 ```
 
 ### 2. Environment Setup (using `uv`)
-Install the core deep learning dependencies:
+Install the core deep learning and visualization dependencies:
 ```bash
-uv pip install tensorflow scipy trimesh pyyaml
+uv pip install tensorflow scipy trimesh pyyaml pyrender pyglet==1.5.27
 ```
-*Note: TensorFlow 2.18+ is recommended for Python 3.10+ compatibility.*
+*Note: TensorFlow 2.18+ is recommended for Python 3.10+ compatibility. `pyglet==1.5.27` is required for compatibility with `pyrender` on most systems.*
 
 ### 3. Download Model Weights
 1.  Download the pretrained models from [this Drive folder](https://drive.google.com/drive/folders/1tBHKf60K8DLM5arm-Chyf7jxkzOr5zGl).

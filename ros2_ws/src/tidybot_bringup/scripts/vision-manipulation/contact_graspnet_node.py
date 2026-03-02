@@ -11,6 +11,7 @@ from tidybot_msgs.srv import PlanToTarget
 import struct
 import math
 import tf2_ros
+import tf2_geometry_msgs
 from scipy.spatial.transform import Rotation as R
 
 # To force CPU usage if no GPU is available
@@ -19,7 +20,15 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 # Add Contact-GraspNet paths
 # The node is in ros2_ws/src/tidybot_bringup/scripts/vision-manipulation
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-CG_ROOT = os.path.join(SCRIPT_DIR, "contact_graspnet")
+
+if "install" in SCRIPT_DIR:
+    # Running from installed location: lib/tidybot_bringup/contact_graspnet_node.py
+    # Submodule should be at: lib/tidybot_bringup/contact_graspnet/
+    CG_ROOT = os.path.join(SCRIPT_DIR, "contact_graspnet")
+else:
+    # Running from source: src/tidybot_bringup/scripts/vision-manipulation/contact_graspnet_node.py
+    CG_ROOT = os.path.join(SCRIPT_DIR, "contact_graspnet")
+
 sys.path.append(CG_ROOT)
 sys.path.append(os.path.join(CG_ROOT, "contact_graspnet"))
 
@@ -44,11 +53,19 @@ class ContactGraspNetNode(Node):
         self.declare_parameter("use_detected_orientation", True)
         self.declare_parameter("send_plan_request", False)
         self.declare_parameter("forward_passes", 1)
-        self.declare_parameter("z_range", [0.2, 1.5])
+        self.declare_parameter("z_range", [0.1, 1.5])
+        self.declare_parameter("threshold", 0.2) 
+        
+        # WidowX WX250s depth from wrist to finger center is ~0.065m
+        # The model assumes 0.1034m (Panda). 
+        # Difference (~0.038m) is why grasps appear "above" the object.
+        self.declare_parameter("gripper_depth", 0.065) 
 
         ckpt_dir = self.get_parameter("ckpt_dir").get_parameter_value().string_value
         self.forward_passes = self.get_parameter("forward_passes").get_parameter_value().integer_value
         self.z_range = self.get_parameter("z_range").get_parameter_value().double_array_value
+        self.actual_depth = self.get_parameter("gripper_depth").get_parameter_value().double_value
+        self.model_depth = 0.1034 # Constant from Contact-GraspNet Panda model
 
         if GraspEstimator is None:
             self.get_logger().error("Contact-GraspNet dependencies (TensorFlow) not found. Please install them and compile PointNet2 ops.")
@@ -58,10 +75,15 @@ class ContactGraspNetNode(Node):
         self.get_logger().info(f"Loading Contact-GraspNet model from {ckpt_dir}...")
         try:
             # Load config
-            # config_utils needs the path to the config.yaml usually in the checkpoint dir or project root
-            # Contact-GraspNet repo has it in contact_graspnet/config.yaml
+            # IMPORTANT: Force batch_size=1 for inference
             config_path = os.path.join(CG_ROOT, "contact_graspnet/config.yaml")
-            self.global_config = config_utils.load_config(os.path.dirname(config_path))
+            self.global_config = config_utils.load_config(os.path.dirname(config_path), batch_size=1)
+            
+            # Override thresholds for inference quality
+            thresh = self.get_parameter("threshold").get_parameter_value().double_value
+            self.global_config['TEST']['first_thres'] = thresh
+            self.global_config['TEST']['second_thres'] = thresh
+            self.global_config['DATA']['use_farthest_point'] = False # Faster inference
             
             # Build estimator
             self.grasp_estimator = GraspEstimator(self.global_config)
@@ -82,6 +104,7 @@ class ContactGraspNetNode(Node):
             return
 
         # --- Subscribers/Publishers ---
+        # Use BEST_EFFORT to be compatible with both Reliable and Best Effort publishers
         qos_profile = QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT, depth=1)
         self.cloud_sub = self.create_subscription(
             PointCloud2, "/camera/points", self.cloud_callback, qos_profile
@@ -154,14 +177,16 @@ class ContactGraspNetNode(Node):
         best_grasp = None
         
         for seg_id in scores:
-            if len(scores[seg_id]) > 0:
-                idx = np.argmax(scores[seg_id])
-                if scores[seg_id][idx] > best_score:
-                    best_score = scores[seg_id][idx]
+            all_scores = scores[seg_id]
+            if len(all_scores) > 0:
+                self.get_logger().info(f"Detected {len(all_scores)} grasps in segment {seg_id}. Max score: {np.max(all_scores):.4f}")
+                idx = np.argmax(all_scores)
+                if all_scores[idx] > best_score:
+                    best_score = all_scores[idx]
                     best_grasp = pred_grasps_cam[seg_id][idx]
         
         if best_grasp is None:
-            self.get_logger().warn("No grasps detected.")
+            self.get_logger().warn("No grasps detected above threshold.")
             return None
             
         self.get_logger().info(f"Best grasp score: {best_score:.4f}")
@@ -197,21 +222,34 @@ class ContactGraspNetNode(Node):
 
     def publish_grasp(self, grasp_matrix, header):
         # grasp_matrix is 4x4
+        # Original Contact-GraspNet grasp pose is at the gripper base (Panda).
+        
         translation = grasp_matrix[:3, 3]
         rotation_matrix = grasp_matrix[:3, :3]
+        
+        # Correction: The model assumes a deeper gripper (model_depth).
+        # We need to shift the pose forward along the approach axis (Z-axis of gripper)
+        # to match our shallower gripper (actual_depth).
+        # approach_vector is the 3rd column of the rotation matrix.
+        approach_vector = rotation_matrix[:, 2]
+        depth_offset = self.model_depth - self.actual_depth
+        
+        # Shift translation forward
+        corrected_translation = translation + depth_offset * approach_vector
         
         quat = R.from_matrix(rotation_matrix).as_quat()
         
         msg = PoseStamped()
         msg.header = header
-        msg.pose.position.x = float(translation[0])
-        msg.pose.position.y = float(translation[1])
-        msg.pose.position.z = float(translation[2])
+        msg.pose.position.x = float(corrected_translation[0])
+        msg.pose.position.y = float(corrected_translation[1])
+        msg.pose.position.z = float(corrected_translation[2])
         msg.pose.orientation.x = float(quat[0])
         msg.pose.orientation.y = float(quat[1])
         msg.pose.orientation.z = float(quat[2])
         msg.pose.orientation.w = float(quat[3])
         
+        self.get_logger().info(f"Original Pos: {translation}, Corrected: {corrected_translation}")
         return msg
 
     def call_planner(self, grasp_msg):

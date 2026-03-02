@@ -42,9 +42,16 @@ install(PROGRAMS
   scripts/Manipulation/manipulation_node.py
   scripts/vision-manipulation/grasp_trigger_node.py
   scripts/vision-manipulation/pointnet_gpd_node.py
+  scripts/vision-manipulation/contact_graspnet_node.py
+  scripts/vision-manipulation/simple_grasp_planner_node.py
   scripts/Navigation/navigator.py
   scripts/Navigation/vision_yolo_gemini.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install Contact-GraspNet as a package directory
+install(DIRECTORY scripts/vision-manipulation/contact_graspnet/
+  DESTINATION lib/${PROJECT_NAME}/contact_graspnet
 )
 
 ament_package()
