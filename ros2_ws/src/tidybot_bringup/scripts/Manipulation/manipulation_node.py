@@ -522,7 +522,7 @@ class ManipulationExecutor(Node):
         # Publish directly to /{arm}_arm/joint_cmd (works for sim and real)
         msg = Float64MultiArray()
         msg.data = list(joint_targets)
-        self.arm_pubs[self.arm_name].publish(msg)
+        #self.arm_pubs[self.arm_name].publish(msg)
 
         self.get_logger().info(
             f"  Sent joints to {self.arm_name} arm: "
@@ -547,7 +547,7 @@ class ManipulationExecutor(Node):
         request.arm_name = self.arm_name
         request.target_pose = target_pose
         request.use_orientation = True
-        request.execute = False  # IK only — we publish joint_cmd ourselves
+        request.execute = True  # IK only — we publish joint_cmd ourselves
         request.duration = 2.0
         request.max_condition_number = 100.0
 
