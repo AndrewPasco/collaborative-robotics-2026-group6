@@ -11,3 +11,6 @@
 [submodule "ros2_ws/src/grasp_detection_ros2"]
 	path = ros2_ws/src/grasp_detection_ros2
 	url = https://github.com/socrob/grasp_detection_ros2
+[submodule "ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/contact_graspnet"]
+	path = ros2_ws/src/tidybot_bringup/scripts/vision-manipulation/contact_graspnet
+	url = https://github.com/NVlabs/contact_graspnet
