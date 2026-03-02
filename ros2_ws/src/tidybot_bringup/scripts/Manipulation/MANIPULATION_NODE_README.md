@@ -215,10 +215,12 @@ Falls back to looking up joints by name (e.g., `right_waist`, `right_shoulder`, 
 
 ## Motion Planning
 
+We use the **built-in motion planner** (`/plan_to_target` service from `tidybot_ik`) for all IK solving. The planner handles inverse kinematics, singularity checks, and collision validation. The only difference from the default usage is that we set `execute=False` so the planner returns the joint solution to us instead of publishing it directly. This lets us publish on the unified `Float64MultiArray` topic that works for both sim and real (the planner's built-in publish uses `ArmCommand`, which only works in sim).
+
 ### With planner (`use_motion_planner=true`):
-1. Calls `/plan_to_target` with `execute=False` — returns IK solution only
-2. Extracts 6 joint positions from response
-3. Publishes as `Float64MultiArray` to `/{arm}_arm/joint_cmd`
+1. Calls `/plan_to_target` with `execute=False` — planner solves IK and returns joint positions
+2. Extracts 6 joint positions from response (same solution the planner would have published)
+3. We publish as `Float64MultiArray` to `/{arm}_arm/joint_cmd` (unified sim/real topic)
 4. In sim: MuJoCo position actuators provide physics-based smoothing
 5. On real: `arm_wrapper_node` handles velocity limiting (max 1.0 rad/s) at 50 Hz
 
