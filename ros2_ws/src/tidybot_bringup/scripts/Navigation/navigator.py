@@ -60,8 +60,8 @@ IMAGE_CENTER_X = IMAGE_WIDTH / 2.0
 # Same concept as HW2 P7 Kp, but in pixel-space:
 #   HW2: angular_vel = Kp * (theta_ref - theta_current)       [rad error]
 #   Here: angular_vel = KP_ANGULAR * (center_px - object_px)  [pixel error]
-KP_ANGULAR = 0.001           # rad/s per pixel of centering error
-APPROACH_LINEAR_VEL = 0.3   # m/s max forward speed
+KP_ANGULAR = 0.01          # rad/s per pixel of centering error
+APPROACH_LINEAR_VEL = 0.5   # m/s max forward speed
 CENTERING_DEADZONE = 5       # pixels — reduced to prevent deadlock with alignment threshold
 KP_APPROACH_LINEAR = 0.02    # m/s per pixel of vertical error (sharper deceleration)
 MIN_APPROACH_LINEAR_VEL = 0.04 # m/s floor to prevent stalling
@@ -79,7 +79,7 @@ CLOSE_DEPTH_PNP = 0.45         # meters via AprilTag PnP (precise check)
 HOME_ARRIVAL_DEPTH = 0.30      # meters — "back at start" via AprilTag
 
 # --- Scanning (step B) ---
-SCAN_ANGULAR_VEL = 0.1        # rad/s while spinning
+SCAN_ANGULAR_VEL = 0.2       # rad/s while spinning
 SCAN_FULL_ROTATION = 2 * math.pi / SCAN_ANGULAR_VEL  # seconds for 360°
 
 # --- Safety Limits ---
@@ -414,7 +414,7 @@ class Navigator(Node):
         # If centering error is large, don't move forward yet.
         # This prevents the "arc" motion and ensure a direct "b-line".
         # Once reasonably centered, drive while continuing to adjust.
-        if abs(error_x) > 20:
+        if abs(error_x) > 50:
             v = 0.0
             
             # Throttle the logging to avoid spamming at 10Hz
