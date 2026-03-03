@@ -41,15 +41,10 @@ import time
 import math
 
 from geometry_msgs.msg import Twist, Point, Pose, Pose2D
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Float64MultiArray
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║                     TUNABLE PARAMETERS                         ║
-# ║  Start with Kp ~ 1.0 (same ballpark as HW2 P7 gains).         ║
-# ║  The pixel-space version is Kp_angular ≈ 1.0 / 320 ≈ 0.003    ║
-# ╚══════════════════════════════════════════════════════════════════╝
 
 # --- Camera ---
 IMAGE_WIDTH   = 640
@@ -60,9 +55,10 @@ IMAGE_CENTER_X = IMAGE_WIDTH / 2.0
 # Same concept as HW2 P7 Kp, but in pixel-space:
 #   HW2: angular_vel = Kp * (theta_ref - theta_current)       [rad error]
 #   Here: angular_vel = KP_ANGULAR * (center_px - object_px)  [pixel error]
-KP_ANGULAR = 0.01          # rad/s per pixel of centering error
+KP_ANGULAR = 0.000625          # rad/s per pixel of centering error IMAGE_WIDTH/2 * 0.000625 = 0.2 rad/s at edge of frame
 APPROACH_LINEAR_VEL = 0.5   # m/s max forward speed
-CENTERING_DEADZONE = 5       # pixels — reduced to prevent deadlock with alignment threshold
+CENTERING_DEADZONE = 5       # pixels - Stop turning if we're within this many pixels of center (prevents jitter)
+CENTERING_SLOWDOWN_ZONE = 40 # pixels - Doesnt move until within this many pixels of center (face-first alignment
 KP_APPROACH_LINEAR = 0.02    # m/s per pixel of vertical error (sharper deceleration)
 MIN_APPROACH_LINEAR_VEL = 0.04 # m/s floor to prevent stalling
 
@@ -91,12 +87,23 @@ MAX_ANGULAR_VEL = 1.0
 KP_ODOM_LINEAR  = 0.8
 KP_ODOM_ANGULAR = 1.5
 
+# --- Fine-centering (after coarse approach) ---
+FINE_CENTERING_DEADZONE = 3   # pixels — tighter than coarse CENTERING_DEADZONE (5px)
+FINE_CENTERING_HOLD     = 0.5 # seconds centred before advancing
+
+# --- Final approach (odom-based, no YOLO) ---
+FINAL_APPROACH_DIST = 0.6   # metres to drive after camera reset
+FINAL_APPROACH_VEL  = 0.1   # m/s (slow — we are very close)
+
 # --- States ---
-STATE_IDLE        = "IDLE"
-STATE_SCANNING    = "SCANNING"
-STATE_APPROACHING = "APPROACHING"
-STATE_ARRIVED     = "ARRIVED"
-STATE_RETURNING   = "RETURNING"
+STATE_IDLE           = "IDLE"
+STATE_SCANNING       = "SCANNING"
+STATE_APPROACHING    = "APPROACHING"
+STATE_FINE_CENTERING = "FINE_CENTERING"
+STATE_CAMERA_RESET   = "CAMERA_RESET"
+STATE_FINAL_APPROACH = "FINAL_APPROACH"
+STATE_ARRIVED        = "ARRIVED"
+STATE_RETURNING      = "RETURNING"
 
 
 class Navigator(Node):
@@ -141,11 +148,23 @@ class Navigator(Node):
         self.start_y = 0.0
         self.start_theta = 0.0
 
+        # ── Fine-centering state ──
+        self._fine_center_start = None  # time when we first became centred
+
+        # ── Camera-reset state ──
+        self._cam_reset_phase     = 0    # 0=tilt-down, 1=wait, 2=tilt-up, 3=wait2
+        self._cam_reset_phase_t   = 0.0
+
+        # ── Final-approach (odom) state ──
+        self._final_start_x = None
+        self._final_start_y = None
+
         # ══════════ Publishers (same as HW2 P7) ══════════
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.status_pub  = self.create_publisher(String, '/brain/navigation_status', 10)
-        self.target_pub  = self.create_publisher(String, '/vision/target', 10)
+        self.cmd_vel_pub    = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.status_pub     = self.create_publisher(String, '/brain/navigation_status', 10)
+        self.target_pub     = self.create_publisher(String, '/vision/target', 10)
         self.target_pose_pub = self.create_publisher(Pose2D, '/base/target_pose', 10)
+        self.pan_tilt_pub   = self.create_publisher(Float64MultiArray, '/camera/pan_tilt_cmd', 10)
 
         # ══════════ Subscribers ══════════
 
@@ -301,6 +320,12 @@ class Navigator(Node):
             self.do_scan()
         elif self.state == STATE_APPROACHING:
             self.do_approach()
+        elif self.state == STATE_FINE_CENTERING:
+            self.do_fine_centering()
+        elif self.state == STATE_CAMERA_RESET:
+            self.do_camera_reset()
+        elif self.state == STATE_FINAL_APPROACH:
+            self.do_final_approach()
         elif self.state == STATE_RETURNING:
             self.do_return()
         # IDLE and ARRIVED: do nothing, wait for Brain
@@ -390,15 +415,15 @@ class Navigator(Node):
         pixel_y   = det.y
         bbox_area = det.z
 
-        # ── Check if close enough for grasping (Bottom of screen) ──
-        # Objects get lower in the image as we get closer.
-        # Stop when the center of the object (pixel_y) is near the bottom edge.
+        # ── Check if close enough — banana at bottom of frame ──
+        # Transition to fine-centering rather than immediately declaring arrived.
         if pixel_y > IMAGE_HEIGHT - 50:
             self.send_vel(0.0, 0.0)
-            self.state = STATE_ARRIVED
+            self.state = STATE_FINE_CENTERING
+            self._fine_center_start = None
             self.get_logger().info(
-                f'ARRIVED — grasp position reached (y={pixel_y:.0f})')
-            self.publish_status('arrived')
+                f'Banana at bottom (y={pixel_y:.0f}) — transitioning to FINE_CENTERING')
+            self.publish_status('fine_centering')
             return
 
         # ── Proportional control (HW2 P7 pattern) ──
@@ -414,7 +439,7 @@ class Navigator(Node):
         # If centering error is large, don't move forward yet.
         # This prevents the "arc" motion and ensure a direct "b-line".
         # Once reasonably centered, drive while continuing to adjust.
-        if abs(error_x) > 50:
+        if abs(error_x) > CENTERING_SLOWDOWN_ZONE:
             v = 0.0
             
             # Throttle the logging to avoid spamming at 10Hz
@@ -434,6 +459,125 @@ class Navigator(Node):
             v = max(MIN_APPROACH_LINEAR_VEL, min(v, APPROACH_LINEAR_VEL))
 
         self.send_vel(v, omega)
+
+    # ═══════════════════════════════════════════════════════════
+    #  FINE CENTERING — precise lateral alignment before camera reset
+    # ═══════════════════════════════════════════════════════════
+
+    def do_fine_centering(self):
+        """Hold centred for FINE_CENTERING_HOLD seconds, then move to CAMERA_RESET."""
+        if not self._has_fresh_detection():
+            # Lost the target — go back to scanning
+            self.send_vel(0.0, 0.0)
+            self.state = STATE_SCANNING
+            self.scan_start_time = time.time()
+            self.scan_accumulated_theta = 0.0
+            self.last_scan_theta = self.odom_theta
+            self._fine_center_start = None
+            self.get_logger().warn('Fine-center: detection lost, reverting to SCAN')
+            return
+
+        age = time.time() - self.detection_stamp
+        if age > 0.5:
+            self.send_vel(0.0, 0.0)
+            return
+
+        det = self.latest_detection
+        error_x = IMAGE_CENTER_X - det.x
+
+        omega = KP_ANGULAR * error_x
+        if abs(error_x) < FINE_CENTERING_DEADZONE:
+            omega = 0.0
+
+        # Log diagnostic info every ~0.5s
+        now = time.time()
+        if now - getattr(self, '_last_fine_log', 0) >= 0.5:
+            self._last_fine_log = now
+            hold_time = (now - self._fine_center_start) if self._fine_center_start else 0.0
+            self.get_logger().info(
+                f'Fine-center: err_x={error_x:.1f}px, omega={omega:.3f}, '
+                f'within_deadzone={abs(error_x) < FINE_CENTERING_DEADZONE}, '
+                f'hold={hold_time:.2f}/{FINE_CENTERING_HOLD}s'
+            )
+
+        self.send_vel(0.0, omega)
+
+        # Track how long we've stayed centred
+        if abs(error_x) < FINE_CENTERING_DEADZONE:
+            if self._fine_center_start is None:
+                self._fine_center_start = time.time()
+            elif time.time() - self._fine_center_start >= FINE_CENTERING_HOLD:
+                self.send_vel(0.0, 0.0)
+                self.state = STATE_CAMERA_RESET
+                self._cam_reset_phase   = 0
+                self._cam_reset_phase_t = time.time()
+                self.get_logger().info('Fine-centering done — transitioning to CAMERA_RESET')
+                self.publish_status('camera_reset')
+        else:
+            self._fine_center_start = None  # reset hold timer if we drift
+
+    # ═══════════════════════════════════════════════════════════
+    #  CAMERA RESET — tilt down then up so the banana is visible
+    #  at close range (sim camera freaks out on direct downward tilt)
+    # ═══════════════════════════════════════════════════════════
+
+    def _pub_pan_tilt(self, pan: float, tilt: float):
+        msg = Float64MultiArray()
+        msg.data = [pan, tilt]
+        self.pan_tilt_pub.publish(msg)
+
+    def do_camera_reset(self):
+        now = time.time()
+        elapsed = now - self._cam_reset_phase_t
+
+        if self._cam_reset_phase == 0:
+            # Send tilt down
+            self._pub_pan_tilt(0.0, -0.6)
+            self.get_logger().info('Camera: tilting up (-0.6)')
+            self._cam_reset_phase = 1
+            self._cam_reset_phase_t = now
+
+        elif self._cam_reset_phase == 1 and elapsed >= 1.2:
+            # Send tilt up
+            self._pub_pan_tilt(0.0, 0.6)
+            self.get_logger().info('Camera: tilting down (0.6)')
+            self._cam_reset_phase = 2
+            self._cam_reset_phase_t = now
+
+        elif self._cam_reset_phase == 2 and elapsed >= 1.2:
+            # Camera settled — kick off final approach
+            self._final_start_x = self.odom_x
+            self._final_start_y = self.odom_y
+            self.state = STATE_FINAL_APPROACH
+            self.get_logger().info(
+                f'Camera reset done — FINAL_APPROACH from '
+                f'({self._final_start_x:.3f}, {self._final_start_y:.3f})')
+            self.publish_status('final_approach')
+
+    # ═══════════════════════════════════════════════════════════
+    #  FINAL APPROACH — odom-based 0.7 m drive (no YOLO needed)
+    # ═══════════════════════════════════════════════════════════
+
+    def do_final_approach(self):
+        dist = math.sqrt(
+            (self.odom_x - self._final_start_x) ** 2 +
+            (self.odom_y - self._final_start_y) ** 2
+        )
+
+        if dist < FINAL_APPROACH_DIST:
+            self.send_vel(FINAL_APPROACH_VEL, 0.0)
+            # Log every ~1 s
+            now = time.time()
+            if now - getattr(self, '_fa_log_t', 0) >= 1.0:
+                self._fa_log_t = now
+                self.get_logger().info(
+                    f'Final approach: {dist:.3f}/{FINAL_APPROACH_DIST}m')
+        else:
+            self.send_vel(0.0, 0.0)
+            self.state = STATE_ARRIVED
+            self.get_logger().info(
+                f'ARRIVED — final approach complete ({dist:.3f}m)')
+            self.publish_status('arrived')
 
     # ═══════════════════════════════════════════════════════════
     #  STEP I: RETURN TO START

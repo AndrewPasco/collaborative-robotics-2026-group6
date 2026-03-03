@@ -29,14 +29,13 @@ import sys
 from audio_item_detector import ItemExtractorBase, ItemExtractorROS, import_ros2
 
 
-def test_with_file(audio_file_path: str, api_key_path=None):
+def test_with_file(audio_file_path: str):
     """
     Test the detector with a pre-recorded audio file.
     Simulates how the real system will use the detector with audio input.
     
     Args:
         audio_file_path: Path to the WAV audio file
-        api_key_path: Optional path to API key file
         
     Returns:
         Extracted item name
@@ -50,7 +49,7 @@ def test_with_file(audio_file_path: str, api_key_path=None):
     
     # Initialize the detector (simulating stage 1 of real system)
     print('\nInitializing Audio Item Detector...')
-    detector = ItemExtractorBase(api_key_path=api_key_path)
+    detector = ItemExtractorBase()
     
     # Extract item from audio
     print('\nProcessing audio to extract item name...')
@@ -171,12 +170,6 @@ def main():
         default=5.0,
         help='Recording duration in seconds for live test (default: 5.0)'
     )
-    parser.add_argument(
-        '--api-key', '-k',
-        type=str,
-        default=None,
-        help='Path to API key file (default: /mnt/hgfs/CS339R/api.txt)'
-    )
     args = parser.parse_args()
     
     print('='*60)
@@ -187,10 +180,10 @@ def main():
     try:
         if args.file:
             # Test with file
-            result = test_with_file(args.file, api_key_path=args.api_key)
+            result = test_with_file(args.file)
         else:
             # Test with live recording
-            result = test_with_recording(args.duration, api_key_path=args.api_key)
+            result = test_with_recording(args.duration)
         
         # Exit with appropriate code
         if result:

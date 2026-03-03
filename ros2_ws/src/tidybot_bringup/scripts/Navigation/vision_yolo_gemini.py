@@ -294,12 +294,7 @@ class VisionYoloGemini(Node):
 
     def _run_yolo(self, frame: np.ndarray):
         """Run YOLO object detection."""
-        # Crop the top half of the image to speed up inference (background)
-        h = frame.shape[0]
-        crop_y = h // 2
-        cropped_frame = frame[crop_y:, :]
-        
-        results = self.yolo_model(cropped_frame, conf=YOLO_CONFIDENCE, verbose=False)
+        results = self.yolo_model(frame, conf=YOLO_CONFIDENCE, verbose=False)
 
         self.latest_detections = []
         for r in results:
@@ -308,12 +303,8 @@ class VisionYoloGemini(Node):
                 cls_id = int(box.cls[0])
                 cls_name = self.yolo_model.names[cls_id]
                 conf = float(box.conf[0])
-                x1, y1_crop, x2, y2_crop = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
                 
-                # Add back the vertical crop offset so coordinates match original 640x480 frame
-                y1 = y1_crop + crop_y
-                y2 = y2_crop + crop_y
-
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
                 area = (x2 - x1) * (y2 - y1)

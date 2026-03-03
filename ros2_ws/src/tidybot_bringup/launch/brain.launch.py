@@ -15,7 +15,10 @@ Launches the FULL system in one command:
    - brain_node        (state machine orchestrator)
 
 Usage:
-    ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml show_mujoco_viewer:=true use_rviz:=true 
+    ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml show_mujoco_viewer:=true use_rviz:=true
+Without sim:
+    ros2 launch tidybot_bringup brain.launch.py use_sim:=false
+    
     ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
     ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /home/mete/collaborative-robotics-2026-group6/examples/banana.wav'}"
@@ -23,8 +26,9 @@ Test audio:
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -43,15 +47,26 @@ def generate_launch_description():
         'show_mujoco_viewer', default_value='true',
         description='Show MuJoCo viewer window'
     )
-    sim_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([pkg_bringup, 'launch', 'sim.launch.py'])
-        ),
-        launch_arguments={
-            'camera_rate': '3.0',
-            'use_rviz': LaunchConfiguration('use_rviz'),
-            'show_mujoco_viewer': LaunchConfiguration('show_mujoco_viewer'),
-        }.items(),
+
+    declare_use_sim = DeclareLaunchArgument(
+        'use_sim', default_value='true',
+        description='Launch simulation layer (sim.launch.py). Set to false if real robot drivers are already running.'
+    )
+
+    sim_launch = GroupAction(
+        condition=IfCondition(LaunchConfiguration('use_sim')),
+        actions=[
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution([pkg_bringup, 'launch', 'sim.launch.py'])
+                ),
+                launch_arguments={
+                    'camera_rate': '3.0',
+                    'use_rviz': LaunchConfiguration('use_rviz'),
+                    'show_mujoco_viewer': LaunchConfiguration('show_mujoco_viewer'),
+                }.items(),
+            )
+        ]
     )
 
     # ── Brain-specific nodes ────────────────────────────────────────
@@ -101,6 +116,7 @@ def generate_launch_description():
         # Arguments
         declare_use_rviz,
         declare_show_viewer,
+        declare_use_sim,
         # Simulation layer
         sim_launch,
         # Brain layer

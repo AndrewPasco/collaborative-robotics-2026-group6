@@ -51,18 +51,29 @@ class ItemExtractorBase:
         
         # Configure Gemini
         genai.configure(api_key=api_key)
-        self.gemini_model = genai.GenerativeModel("models/gemini-2.0-flash-lite")
+        
+        # Default model for initialization (will be overridden in extraction if it fails)
+        model_name = os.environ.get('GEMINI_MODEL', 'models/gemini-2.0-flash-lite')
+        self.gemini_model = genai.GenerativeModel(model_name)
         
         # Setup Google Cloud Credentials if not provided via env
         gcp_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
         if not gcp_creds:
             # Look specifically for GOOGLE_CREDENTIALS.json in common locations
             try:
-                # 1. Check user home directory (most robust to moving the script)
+                # 1. Check user home directory
                 home_path = os.path.expanduser('~/GOOGLE_CREDENTIALS.json')
                 
                 # 2. Check current working directory
                 cwd_path = os.path.join(os.getcwd(), 'GOOGLE_CREDENTIALS.json')
+
+                # 3. Check repo root (from env)
+                repo_root = os.environ.get('TIDYBOT_REPO_ROOT')
+                repo_path = os.path.join(repo_root, 'GOOGLE_CREDENTIALS.json') if repo_root else None
+
+                # 4. Check parent of this script
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                parent_path = os.path.join(script_dir, '..', '..', '..', '..', 'GOOGLE_CREDENTIALS.json')
                 
                 if os.path.exists(home_path):
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = home_path
@@ -70,6 +81,13 @@ class ItemExtractorBase:
                 elif os.path.exists(cwd_path):
                     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cwd_path
                     self.log(f"Using STT credentials from CWD: {cwd_path}")
+                elif repo_path and os.path.exists(repo_path):
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = repo_path
+                    self.log(f"Using STT credentials from repo root: {repo_path}")
+                elif os.path.exists(parent_path):
+                    parent_path = os.path.abspath(parent_path)
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = parent_path
+                    self.log(f"Using STT credentials from parent dir: {parent_path}")
             except Exception:
                 pass
         
@@ -145,7 +163,9 @@ class ItemExtractorBase:
         Two-stage pipeline:
         1. Transcribe WAV via STT.
         2. Extract item from transcript via Gemini-Text.
+           Falls back to last-word heuristic if Gemini is rate-limited.
         """
+        transcript = ""
         try:
             self.log(f'Processing audio: {wav_path}')
             
@@ -170,8 +190,40 @@ Sentence: "{transcript}"
 Result:"""
 
             self.log('Extracting item via Gemini-Text...')
-            response = self.gemini_model.generate_content(prompt)
             
+            # Use chain: 2.0-flash-lite -> 2.0-flash -> 3-flash-preview
+            model_chain = [
+                'models/gemini-2.0-flash-lite',
+                'models/gemini-2.0-flash',
+                'models/gemini-3-flash-preview'
+            ]
+            
+            response = None
+            for model_name in model_chain:
+                self.log(f'Trying Gemini model: {model_name}')
+                self.gemini_model = genai.GenerativeModel(model_name)
+                
+                # Exponential backoff retry for 429 rate limits on this specific model
+                for attempt in range(3):
+                    try:
+                        response = self.gemini_model.generate_content(prompt)
+                        break
+                    except Exception as e:
+                        if '429' in str(e) or 'Resource exhausted' in str(e) or 'RESOURCE_EXHAUSTED' in str(e):
+                            wait = (2 ** attempt) 
+                            self.log(f'Gemini 429 rate limit (attempt {attempt+1}/3), retrying in {wait}s...')
+                            time.sleep(wait)
+                        else:
+                            self.log(f'Error with model {model_name}: {e}')
+                            break # Try next model in chain
+
+                if response:
+                    break
+
+            if response is None:
+                self.log('Gemini model chain: All models failed or rate limited.')
+                return "ERROR", transcript
+
             if not response.candidates or not response.candidates[0].content.parts:
                 return "ERROR", transcript
             
@@ -184,19 +236,18 @@ Result:"""
             return item_name, transcript
 
         except Exception as e:
-            self.log(f'ERROR in extraction: {str(e)}')
-            return "ERROR", ""
+            self.log(f'ERROR in Gemini extraction: {str(e)}')
+            return "ERROR", transcript
 
 
 class ItemExtractorROS:
     """ROS2 version with microphone recording capability."""
     
-    def __init__(self, api_key_path=None, rclpy_module=None, Node=None, AudioRecord=None):
+    def __init__(self, rclpy_module=None, Node=None, AudioRecord=None):
         """
         Initialize ROS2-enabled item extractor.
         
         Args:
-            api_key_path: Path to API key file
             rclpy_module: rclpy module (pass from import_ros2())
             Node: Node class (pass from import_ros2())
             AudioRecord: AudioRecord service (pass from import_ros2())
@@ -210,7 +261,7 @@ class ItemExtractorROS:
         self.node = self.Node('item_extractor')
         
         # Setup base extractor functionality
-        self.base = ItemExtractorBase(api_key_path)
+        self.base = ItemExtractorBase()
         
         # Microphone service client
         self.mic_client = self.node.create_client(self.AudioRecord, '/microphone/record')

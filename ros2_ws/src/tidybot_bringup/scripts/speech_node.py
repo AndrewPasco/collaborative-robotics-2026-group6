@@ -13,6 +13,7 @@ which is fulfilled by the main thread loop.
 import os
 import threading
 import time
+import traceback
 
 import rclpy
 from rclpy.node import Node
@@ -148,7 +149,7 @@ class SpeechNode(Node):
                 self._publish(item)
 
         except Exception as e:
-            self._fail(f'Exception: {e}')
+            self._fail(f'Exception: {e}\n{traceback.format_exc()}')
         finally:
             with self.busy_lock:
                 self.is_busy = False
