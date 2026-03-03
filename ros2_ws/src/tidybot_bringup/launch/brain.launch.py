@@ -18,7 +18,7 @@ Usage:
     ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml show_mujoco_viewer:=true use_rviz:=true 
     ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
-    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio ~/collaborative-robotics-2026-group6/examples/banana.wav'}"
+    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /home/mete/collaborative-robotics-2026-group6/examples/banana.wav'}"
 """
 
 import os

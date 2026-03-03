@@ -52,7 +52,7 @@ graph TD
 - **Wait Behavior**: Brain remains in `LISTENING` state until a non-empty string is received. If `"ERROR"` is returned, it retries with a 5s delay.
 
 #### 2. Navigation Pipeline
-- **Publishes**: `/brain/navigation_goal` (String: `"find <item>"`, `"return_to_start"`)
+- **Publishes**: `/brain/navigation_goal` (String: `"<item>"`, `"return_to_start"`)
 - **Subscribes**: `/brain/navigation_status` (String: `"idle"`, `"navigating"`, `"arrived"`, `"failed"`)
 - **Wait Behavior**: Brain transitions to the next state ONLY when status is `"arrived"`.
 - **Sync Note**: Navigation node drives to specific coordinates (e.g., `1.0, 1.0`) and waits for the simulation's `/base/goal_reached` topic before reporting arrival.
