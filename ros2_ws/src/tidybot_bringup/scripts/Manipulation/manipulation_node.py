@@ -16,12 +16,13 @@ ARCHITECTURE:
 
   States:
     IDLE            – waiting for a grasp pose
+    MOVE_TO_SLEEP   – (task 1 only) move arm to sleep pose before grasping
     OPEN_GRIPPER    – opening gripper before approach
     MOVE_PREGRASP   – arm moving to pre-grasp (above grasp pose)
     MOVE_GRASP      – arm moving to grasp position
     PAUSE_AT_GRASP  – settling at grasp pose (gripper still open)
     CLOSE_GRIPPER   – closing gripper on object (stall detection)
-    MOVE_LIFT       – lifting object
+    MOVE_LIFT       – lifting object (task 1: sleep pose, task 3: grasp+15cm)
     DONE            – sequence complete, publish status
 
 TOPICS SUBSCRIBED:
@@ -81,8 +82,11 @@ GRIPPER_CLOSE = 1.0
 PREGRASP_Z_OFFSET = 0.08   # 8 cm above the grasp pose
 LIFT_HEIGHT = 0.15          # 15 cm lift after grasping
 
+# Sleep pose (idle/return position — from test_arms_real.py)
+SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
+
 # Joint state feedback thresholds
-ARM_ARRIVAL_TOLERANCE = 0.15     # rad – how close joints must be to target
+ARM_ARRIVAL_TOLERANCE = 0.05     # rad – how close joints must be to target
 GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
 GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
 PAUSE_AT_GRASP_SECS = 1.0       # seconds to hold still at grasp before closing
@@ -306,8 +310,6 @@ class ManipulationExecutor(Node):
         pos = self._get_arm_positions(arm)
         if pos is None or target is None:
             return False
-        self.get_logger().info(f"arm positions: {pos}")
-        self.get_logger().info(f"arm target: {target}")
         return all(abs(p - t) < tol for p, t in zip(pos, target))
 
     def _gripper_is_closed(self, arm: str):
@@ -362,6 +364,22 @@ class ManipulationExecutor(Node):
             self.logged_state = self.state
 
         arm = self.arm_name
+
+        # ── MOVE_TO_SLEEP (task 1 only) ────────────────────────────────
+        if self.state == "MOVE_TO_SLEEP":
+            if not self.arm_cmd_sent:
+                # Publish SLEEP_POSE directly to /{arm}_arm/joint_cmd
+                msg = Float64MultiArray()
+                msg.data = list(SLEEP_POSE)
+                self.arm_pubs[arm].publish(msg)
+                self.current_arm_target = list(SLEEP_POSE)
+                self.arm_cmd_sent = True
+                self.get_logger().info(
+                    f"  Sending {arm} arm to sleep pose: {SLEEP_POSE}"
+                )
+            if self._arm_at_target(arm, self.current_arm_target):
+                self.get_logger().info("  Arm arrived at sleep pose.")
+                self._advance("OPEN_GRIPPER")
 
         # ── OPEN_GRIPPER ──────────────────────────────────────────────
         if self.state == "OPEN_GRIPPER":
@@ -446,7 +464,18 @@ class ManipulationExecutor(Node):
         elif self.state == "MOVE_LIFT":
             self.gripper_values[arm] = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
-                self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
+                if self.current_task == 0:
+                    # Task 1: lift to sleep pose (direct joint command)
+                    msg = Float64MultiArray()
+                    msg.data = list(SLEEP_POSE)
+                    self.arm_pubs[arm].publish(msg)
+                    self.current_arm_target = list(SLEEP_POSE)
+                    self.get_logger().info(
+                        f"  Task 1: sending {arm} arm to sleep pose for lift."
+                    )
+                else:
+                    # Task 3: lift to grasp + 15cm (IK via planner)
+                    self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
                 self.arm_cmd_sent = True
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Arm arrived at lift pose.")
@@ -476,15 +505,30 @@ class ManipulationExecutor(Node):
         self.stall_detected_time = None
 
     def _log_state(self):
-        messages = {
-            "OPEN_GRIPPER":   f"Step 1/7 – Opening gripper ({self.arm_name} arm)...",
-            "MOVE_PREGRASP":  "Step 2/7 – Moving to PRE-GRASP...",
-            "MOVE_GRASP":     "Step 3/7 – Descending to GRASP...",
-            "PAUSE_AT_GRASP": f"Step 4/7 – Holding at grasp for {PAUSE_AT_GRASP_SECS}s...",
-            "CLOSE_GRIPPER":  "Step 5/7 – Closing gripper (stall detection)...",
-            "MOVE_LIFT":      "Step 6/7 – LIFTING...",
-            "DONE":           "Step 7/7 – Done!",
-        }
+        task_label = "task1" if self.current_task == 0 else "task3"
+        if self.current_task == 0:
+            # Task 1: 8 states (includes MOVE_TO_SLEEP)
+            messages = {
+                "MOVE_TO_SLEEP":  f"Step 1/8 – [{task_label}] Moving to sleep pose ({self.arm_name} arm)...",
+                "OPEN_GRIPPER":   f"Step 2/8 – [{task_label}] Opening gripper ({self.arm_name} arm)...",
+                "MOVE_PREGRASP":  f"Step 3/8 – [{task_label}] Moving to PRE-GRASP...",
+                "MOVE_GRASP":     f"Step 4/8 – [{task_label}] Descending to GRASP...",
+                "PAUSE_AT_GRASP": f"Step 5/8 – [{task_label}] Holding at grasp for {PAUSE_AT_GRASP_SECS}s...",
+                "CLOSE_GRIPPER":  f"Step 6/8 – [{task_label}] Closing gripper (stall detection)...",
+                "MOVE_LIFT":      f"Step 7/8 – [{task_label}] LIFTING to sleep pose...",
+                "DONE":           f"Step 8/8 – [{task_label}] Done!",
+            }
+        else:
+            # Task 3: 7 states (no MOVE_TO_SLEEP)
+            messages = {
+                "OPEN_GRIPPER":   f"Step 1/7 – [{task_label}] Opening gripper ({self.arm_name} arm)...",
+                "MOVE_PREGRASP":  f"Step 2/7 – [{task_label}] Moving to PRE-GRASP...",
+                "MOVE_GRASP":     f"Step 3/7 – [{task_label}] Descending to GRASP...",
+                "PAUSE_AT_GRASP": f"Step 4/7 – [{task_label}] Holding at grasp for {PAUSE_AT_GRASP_SECS}s...",
+                "CLOSE_GRIPPER":  f"Step 5/7 – [{task_label}] Closing gripper (stall detection)...",
+                "MOVE_LIFT":      f"Step 6/7 – [{task_label}] LIFTING (grasp+15cm)...",
+                "DONE":           f"Step 7/7 – [{task_label}] Done!",
+            }
         self.get_logger().info(messages.get(self.state, f"State: {self.state}"))
 
     def _publish_status(self, reason: str):
@@ -510,10 +554,12 @@ class ManipulationExecutor(Node):
             joint_targets = self._call_planner(target_pose)
             if joint_targets is None:
                 self.get_logger().error(
-                    f"IK failed for z={target_pose.position.z:.3f}. Aborting."
+                    f"IK failed for z={target_pose.position.z:.3f}. "
+                    f"Stopping state machine."
                 )
                 self._publish_status(REASON_IK_FAIL)
-                self._advance("DONE")
+                self.current_arm_target = None
+                self._advance("IDLE")
                 return
         else:
             joint_targets = self._hardcoded_ik(target_pose)
@@ -549,7 +595,7 @@ class ManipulationExecutor(Node):
         request.arm_name = self.arm_name
         request.target_pose = target_pose
         request.use_orientation = True
-        request.execute = True  # IK only — we publish joint_cmd ourselves
+        request.execute = True  # Planner solves IK and publishes ArmCommand
         request.duration = 5.0
         request.max_condition_number = 100.0
 
@@ -641,7 +687,11 @@ class ManipulationExecutor(Node):
             f"{msg.pose.orientation.y:.3f}, "
             f"{msg.pose.orientation.z:.3f})"
         )
-        self._advance("OPEN_GRIPPER")
+        # Task 1: move to sleep pose first; Task 3: skip straight to open gripper
+        if self.current_task == 0:
+            self._advance("MOVE_TO_SLEEP")
+        else:
+            self._advance("OPEN_GRIPPER")
 
     def _publish_hardcoded_pose(self):
         """Publish a test pose (fires once after 3s startup delay)."""
