@@ -82,7 +82,7 @@ PREGRASP_Z_OFFSET = 0.08   # 8 cm above the grasp pose
 LIFT_HEIGHT = 0.15          # 15 cm lift after grasping
 
 # Joint state feedback thresholds
-ARM_ARRIVAL_TOLERANCE = 0.05     # rad – how close joints must be to target
+ARM_ARRIVAL_TOLERANCE = 0.15     # rad – how close joints must be to target
 GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
 GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
 PAUSE_AT_GRASP_SECS = 1.0       # seconds to hold still at grasp before closing
@@ -306,6 +306,8 @@ class ManipulationExecutor(Node):
         pos = self._get_arm_positions(arm)
         if pos is None or target is None:
             return False
+        self.get_logger().info(f"arm positions: {pos}")
+        self.get_logger().info(f"arm target: {target}")
         return all(abs(p - t) < tol for p, t in zip(pos, target))
 
     def _gripper_is_closed(self, arm: str):
@@ -522,7 +524,7 @@ class ManipulationExecutor(Node):
         # Publish directly to /{arm}_arm/joint_cmd (works for sim and real)
         msg = Float64MultiArray()
         msg.data = list(joint_targets)
-        #self.arm_pubs[self.arm_name].publish(msg)
+        ## self.arm_pubs[self.arm_name].publish(msg)
 
         self.get_logger().info(
             f"  Sent joints to {self.arm_name} arm: "

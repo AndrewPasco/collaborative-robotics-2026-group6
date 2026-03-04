@@ -72,7 +72,7 @@ class SimpleGraspPlannerNode(Node):
             PointCloud2, "/camera/points", self.cloud_callback, qos
         )
         self.trigger_sub = self.create_subscription(
-            RegionOfInterest, "/grasp_pose_request_roi", self.trigger_callback, 10
+            RegionOfInterest, "/vision/target_bbox", self.trigger_callback, 10
         )
         self.pose_pub = self.create_publisher(PoseStamped, "/detected_grasps/pose", 10)
         self.rviz_pub = self.create_publisher(PoseStamped, "/detected_grasps/rviz_pose", 10)
@@ -83,7 +83,7 @@ class SimpleGraspPlannerNode(Node):
 
         self.latest_cloud = None
         self.processing = False
-        self.get_logger().info("Simple Grasp Planner Ready (Manual TF). Waiting for ROI on /grasp_pose_request_roi")
+        self.get_logger().info("Simple Grasp Planner Ready (Manual TF). Waiting for ROI on /vision/target_bbox")
 
     def cloud_callback(self, msg):
         self.latest_cloud = msg

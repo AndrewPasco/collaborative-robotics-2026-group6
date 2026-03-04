@@ -207,7 +207,9 @@ float64 duration            # Movement time in seconds
 -   **Perception (VLMs):** You are encouraged to use Visual Language Models for object detection from language commands.
     -   Google Gemini can be used with provided cloud credits.
     -   Local models like `YOLOv11` with `CLIP` are also excellent options.
--   **Grasping:** `PointNetGPD` is used for grasp pose detection on the CPU. Run `./setup_grasping.sh` to install dependencies. See [docs/grasp_detection_setup.md](docs/grasp_detection_setup.md) for details.
+-   **Grasping:** Two options are available for grasp pose detection:
+    -   **PointNetGPD:** A robust ML-based approach for complex geometries. Run `./setup_grasping.sh` to install dependencies. See [docs/grasp_detection_setup.md](docs/grasp_detection_setup.md) for details.
+    -   **Simple Grasping:** A lightweight, heuristic-based approach using object centroids. See [docs/simple_grasping.md](docs/simple_grasping.md) for details.
 -   **Motion Planning (IK):** The `tidybot_ik` package uses `mink` for lightweight inverse kinematics and trajectory optimization, as an alternative to MoveIt2.
 
 ## 6. Development Workflow

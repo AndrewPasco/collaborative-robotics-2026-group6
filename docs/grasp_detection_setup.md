@@ -1,5 +1,7 @@
 # Grasp Detection Setup (PointNetGPD)
 
+*Note: If you are looking for a more lightweight, heuristic-based approach that doesn't require machine learning, see [Simple Centroid-Based Grasping](simple_grasping.md).*
+
 This project uses [PointNetGPD](https://github.com/lianghongzhuo/PointNetGPD) for grasp pose detection. This is a lightweight, Python-based approach that does not require a GPU, making it suitable for the robot's onboard Intel NUC.
 
 ## Architecture
