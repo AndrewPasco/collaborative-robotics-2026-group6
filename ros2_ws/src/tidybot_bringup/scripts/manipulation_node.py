@@ -14,6 +14,7 @@ Communication with brain_node
 Goal strings recognised (placeholder set — extend as needed):
   "grab"    — reach forward, close gripper, retract to safe hold
   "release" — open gripper, return arm to home
+  "deposit" — lift arm slightly, open gripper, return arm to home
   "home"    — move arm to home pose (no gripper change)
 
 Status strings published:
@@ -45,6 +46,7 @@ from tidybot_msgs.msg import ArmCommand
 ARM_HOME      = [0.0,  0.0, 0.0, 0.0,  0.0, 0.0]
 ARM_PRE_GRASP = [0.0,  0.4, 0.5, 0.0, -0.3, 0.0]   # reach forward/down
 ARM_HOLD_SAFE = [0.0,  0.0, 0.3, 0.0,  0.0, 0.0]   # retracted, object held
+ARM_DEPOSIT    = [0.0,  0.2, 0.4, 0.0,  0.0, 0.0]   # slightly higher for bin clearance
 
 ARM_MOVE_DURATION = 2.0   # seconds per arm motion
 GRIPPER_WAIT      = 1.5   # seconds to wait for gripper
@@ -66,7 +68,7 @@ class ManipulationNode(Node):
 
         # ── Internal state ──────────────────────────────────────────
         self.current_goal = None
-        self.sub_state = 'IDLE'  # IDLE, REACHING, CLOSING, RETRACTING, OPENING, HOMING
+        self.sub_state = 'IDLE'  # IDLE, REACHING, CLOSING, RETRACTING, OPENING, HOMING, LIFTING
         self.state_start_time = time.time()
 
         # ── Control loop (50 Hz) ────────────────────────────────────
@@ -97,6 +99,11 @@ class ManipulationNode(Node):
             self.sub_state = 'OPENING'
             self._send_gripper(0.0)              # open gripper
             self.get_logger().info('  Opening gripper …')
+
+        elif goal == 'deposit':
+            self.sub_state = 'LIFTING'
+            self._send_arm(ARM_DEPOSIT)          # lift before release
+            self.get_logger().info('  Lifting arm for deposit …')
 
         elif goal == 'home':
             self.sub_state = 'HOMING'
@@ -169,6 +176,14 @@ class ManipulationNode(Node):
                 self.sub_state = 'IDLE'
                 self.current_goal = None
                 self._publish_status('done')
+
+        # ── DEPOSIT sequence: lift → open → home ───────────────────
+        elif self.sub_state == 'LIFTING':
+            if elapsed > ARM_MOVE_DURATION + 0.5:
+                self.get_logger().info('  Lifted. Opening gripper …')
+                self._send_gripper(0.0)
+                self.sub_state = 'OPENING'
+                self.state_start_time = time.time()
 
 
 def main(args=None):

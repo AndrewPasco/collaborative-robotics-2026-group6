@@ -41,6 +41,7 @@ install(PROGRAMS
   scripts/test_stt.py
   scripts/audio_item_detector.py
   scripts/brain_node.py
+  scripts/brain_node_task2.py
   scripts/navigation_node.py
   scripts/manipulation_node.py
   scripts/speech_node.py

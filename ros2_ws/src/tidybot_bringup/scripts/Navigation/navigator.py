@@ -229,6 +229,9 @@ class Navigator(Node):
             self.goal_reached_flag = False
             self.publish_status('navigating')
             
+            # Reset camera for return
+            self._pub_pan_tilt(0.0, 0.0)
+            
             # Use the robust position controller from the base node 
             target = Pose2D()
             target.x = 0.0
@@ -240,6 +243,9 @@ class Navigator(Node):
         else:
             # We treat any other string as an item name to find
             self.get_logger().info(f'Received item target: {cmd}')
+            
+            # Reset camera to look for the new item
+            self._pub_pan_tilt(0.0, 0.0)
             
             # Publish to vision node
             target_msg = String()

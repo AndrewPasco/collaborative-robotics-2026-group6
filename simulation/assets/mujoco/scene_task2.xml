@@ -1,0 +1,120 @@
+<mujoco model="tidybot task2 sequential scene">
+  <include file="tidybot_wx250s_bimanual.xml"/>
+
+  <statistic center="0 0 0.525" extent="1.1" meansize="0.05"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="140" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+    <!-- Banana mesh and texture (payload) -->
+    <mesh name="banana_mesh" file="011_banana/textured.obj" scale="1 1 1"/>
+    <texture name="banana_tex" type="2d" file="../meshes/011_banana/texture_map.png"/>
+    <material name="banana_mat" texture="banana_tex"/>
+
+    <!-- Bowl mesh and texture (destination) -->
+    <mesh name="bowl_visual" file="../meshes/bowl/model.obj"/>
+    <mesh name="bowl_col_0" file="../meshes/bowl/model_collision_0.obj"/>
+    <mesh name="bowl_col_1" file="../meshes/bowl/model_collision_1.obj"/>
+    <mesh name="bowl_col_2" file="../meshes/bowl/model_collision_2.obj"/>
+    <mesh name="bowl_col_3" file="../meshes/bowl/model_collision_3.obj"/>
+    <mesh name="bowl_col_4" file="../meshes/bowl/model_collision_4.obj"/>
+    <mesh name="bowl_col_5" file="../meshes/bowl/model_collision_5.obj"/>
+    <mesh name="bowl_col_6" file="../meshes/bowl/model_collision_6.obj"/>
+    <mesh name="bowl_col_7" file="../meshes/bowl/model_collision_7.obj"/>
+    <mesh name="bowl_col_8" file="../meshes/bowl/model_collision_8.obj"/>
+    <mesh name="bowl_col_9" file="../meshes/bowl/model_collision_9.obj"/>
+    <mesh name="bowl_col_10" file="../meshes/bowl/model_collision_10.obj"/>
+    <mesh name="bowl_col_11" file="../meshes/bowl/model_collision_11.obj"/>
+    <mesh name="bowl_col_12" file="../meshes/bowl/model_collision_12.obj"/>
+    <mesh name="bowl_col_13" file="../meshes/bowl/model_collision_13.obj"/>
+    <mesh name="bowl_col_14" file="../meshes/bowl/model_collision_14.obj"/>
+    <mesh name="bowl_col_15" file="../meshes/bowl/model_collision_15.obj"/>
+    <mesh name="bowl_col_16" file="../meshes/bowl/model_collision_16.obj"/>
+    <mesh name="bowl_col_17" file="../meshes/bowl/model_collision_17.obj"/>
+    <mesh name="bowl_col_18" file="../meshes/bowl/model_collision_18.obj"/>
+    <mesh name="bowl_col_19" file="../meshes/bowl/model_collision_19.obj"/>
+    <mesh name="bowl_col_20" file="../meshes/bowl/model_collision_20.obj"/>
+    <mesh name="bowl_col_21" file="../meshes/bowl/model_collision_21.obj"/>
+    <mesh name="bowl_col_22" file="../meshes/bowl/model_collision_22.obj"/>
+    <mesh name="bowl_col_23" file="../meshes/bowl/model_collision_23.obj"/>
+    <mesh name="bowl_col_24" file="../meshes/bowl/model_collision_24.obj"/>
+    <mesh name="bowl_col_25" file="../meshes/bowl/model_collision_25.obj"/>
+    <mesh name="bowl_col_26" file="../meshes/bowl/model_collision_26.obj"/>
+    <mesh name="bowl_col_27" file="../meshes/bowl/model_collision_27.obj"/>
+    <mesh name="bowl_col_28" file="../meshes/bowl/model_collision_28.obj"/>
+    <mesh name="bowl_col_29" file="../meshes/bowl/model_collision_29.obj"/>
+    <mesh name="bowl_col_30" file="../meshes/bowl/model_collision_30.obj"/>
+    <mesh name="bowl_col_31" file="../meshes/bowl/model_collision_31.obj"/>
+    <texture name="bowl_tex" type="2d" file="../meshes/bowl/texture.png"/>
+    <material name="bowl_mat" texture="bowl_tex" specular="0.5" shininess="0.5"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 1.5" directional="true"/>
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- Banana (payload) - positioned in front-right of the robot -->
+    <body name="banana" pos="1.5 1.0 0.02">
+      <freejoint name="banana_joint"/>
+      <geom name="banana_geom" type="mesh" mesh="banana_mesh" material="banana_mat"
+        mass="0.12" friction="7 7 0.5"/>
+    </body>
+
+    <!-- Bowl (destination) - positioned in front-left of the robot -->
+    <body name="bowl" pos="-1.0 1.5 0.0">
+      <!-- Visual mesh (non-colliding, group 2) -->
+      <geom name="bowl_visual" material="bowl_mat" mesh="bowl_visual" type="mesh"
+        contype="0" conaffinity="0" group="2"/>
+      <!-- Collision meshes (group 3) -->
+      <geom mesh="bowl_col_0" type="mesh" group="3"/>
+      <geom mesh="bowl_col_1" type="mesh" group="3"/>
+      <geom mesh="bowl_col_2" type="mesh" group="3"/>
+      <geom mesh="bowl_col_3" type="mesh" group="3"/>
+      <geom mesh="bowl_col_4" type="mesh" group="3"/>
+      <geom mesh="bowl_col_5" type="mesh" group="3"/>
+      <geom mesh="bowl_col_6" type="mesh" group="3"/>
+      <geom mesh="bowl_col_7" type="mesh" group="3"/>
+      <geom mesh="bowl_col_8" type="mesh" group="3"/>
+      <geom mesh="bowl_col_9" type="mesh" group="3"/>
+      <geom mesh="bowl_col_10" type="mesh" group="3"/>
+      <geom mesh="bowl_col_11" type="mesh" group="3"/>
+      <geom mesh="bowl_col_12" type="mesh" group="3"/>
+      <geom mesh="bowl_col_13" type="mesh" group="3"/>
+      <geom mesh="bowl_col_14" type="mesh" group="3"/>
+      <geom mesh="bowl_col_15" type="mesh" group="3"/>
+      <geom mesh="bowl_col_16" type="mesh" group="3"/>
+      <geom mesh="bowl_col_17" type="mesh" group="3"/>
+      <geom mesh="bowl_col_18" type="mesh" group="3"/>
+      <geom mesh="bowl_col_19" type="mesh" group="3"/>
+      <geom mesh="bowl_col_20" type="mesh" group="3"/>
+      <geom mesh="bowl_col_21" type="mesh" group="3"/>
+      <geom mesh="bowl_col_22" type="mesh" group="3"/>
+      <geom mesh="bowl_col_23" type="mesh" group="3"/>
+      <geom mesh="bowl_col_24" type="mesh" group="3"/>
+      <geom mesh="bowl_col_25" type="mesh" group="3"/>
+      <geom mesh="bowl_col_26" type="mesh" group="3"/>
+      <geom mesh="bowl_col_27" type="mesh" group="3"/>
+      <geom mesh="bowl_col_28" type="mesh" group="3"/>
+      <geom mesh="bowl_col_29" type="mesh" group="3"/>
+      <geom mesh="bowl_col_30" type="mesh" group="3"/>
+      <geom mesh="bowl_col_31" type="mesh" group="3"/>
+    </body>
+  </worldbody>
+
+  <keyframe>
+    <!-- 21 robot dofs + 7 banana dofs + 7 bowl dofs = 35 total -->
+    <!-- Robot: 3 base + 6 left arm + 2 left gripper + 6 right arm + 2 right gripper = 19+2 = 21 -->
+    <!-- Banana freejoint: x y z qw qx qy qz = 7 -->
+    <!-- Bowl: no freejoint (static destination), so still 28 total like scene_pickup -->
+    <key name="home" qpos="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037 1.5 1.0 0.05 1 0 0 0"/>
+  </keyframe>
+</mujoco>

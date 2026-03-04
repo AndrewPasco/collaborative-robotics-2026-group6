@@ -50,10 +50,15 @@ class SpeechNode(Node):
         """Callback runs in Main Thread. Spawns Worker Thread."""
         goal = msg.data.strip()
         
-        test_file = None
         if goal.lower() == 'listen':
-            pass
+            self.mode = 'single'
+        elif goal.lower() == 'listen_sequential':
+            self.mode = 'sequential'
         elif goal.startswith('test_audio '):
+            self.mode = 'single'
+            test_file = goal.split(' ', 1)[1]
+        elif goal.startswith('test_audio_sequential '):
+            self.mode = 'sequential'
             test_file = goal.split(' ', 1)[1]
         else:
             return
@@ -136,17 +141,20 @@ class SpeechNode(Node):
                 self.extractor.save_wav(self.wav_path, result.audio_data, result.sample_rate)
                 self.get_logger().info(f'Audio saved to: {os.path.abspath(self.wav_path)}')
             
-            item, transcript = self.extractor.extract_item_from_audio(self.wav_path)
+            if self.mode == 'sequential':
+                result_str, transcript = self.extractor.extract_sequential_from_audio(self.wav_path)
+            else:
+                result_str, transcript = self.extractor.extract_item_from_audio(self.wav_path)
 
             if transcript:
                 self.get_logger().info(f'[TRANSCRIPT]: "{transcript}"')
             
-            if not item or item == 'ERROR':
-                self.get_logger().warn('[FAIL] No item detected')
+            if not result_str or result_str == 'ERROR':
+                self.get_logger().warn('[FAIL] Detection failed')
                 self._publish('ERROR')
             else:
-                self.get_logger().info(f'[OK] Detected item: "{item}"')
-                self._publish(item)
+                self.get_logger().info(f'[OK] Result: "{result_str}"')
+                self._publish(result_str)
 
         except Exception as e:
             self._fail(f'Exception: {e}\n{traceback.format_exc()}')

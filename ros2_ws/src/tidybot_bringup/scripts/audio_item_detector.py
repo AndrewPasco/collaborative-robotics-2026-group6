@@ -239,6 +239,79 @@ Result:"""
             self.log(f'ERROR in Gemini extraction: {str(e)}')
             return "ERROR", transcript
 
+    def extract_sequential_from_audio(self, wav_path: str):
+        """
+        Extracts two items (payload and destination) from audio.
+        Returns: JSON string {"payload": "...", "destination": "..."} or "ERROR".
+        """
+        transcript = ""
+        try:
+            self.log(f'Processing audio (sequential): {wav_path}')
+            transcript = self.transcribe_audio(wav_path).strip()
+            self.log(f'STT Transcript: "{transcript}"')
+
+            if not transcript or transcript.upper() == "SILENCE":
+                return "ERROR", "SILENCE"
+
+            prompt = f"""Extract the payload item and the destination container/location from this command.
+Return ONLY a JSON object with keys "payload" and "destination", or return "ERROR" if not found.
+
+Example 1: "put the apple in the basket" -> {{"payload": "apple", "destination": "basket"}}
+Example 2: "grab the banana and place it in the bowl" -> {{"payload": "banana", "destination": "bowl"}}
+
+Rules:
+- Return ONLY the JSON object, nothing else.
+- All values should be lowercase.
+- If you can't find both, return "ERROR".
+
+Command: "{transcript}"
+Result:"""
+
+            self.log('Extracting sequential items via Gemini-Text...')
+            
+            # Use same model chain logic as single extraction
+            model_chain = [
+                'models/gemini-2.0-flash-lite',
+                'models/gemini-2.0-flash',
+                'models/gemini-3-flash-preview'
+            ]
+            
+            response = None
+            for model_name in model_chain:
+                self.gemini_model = genai.GenerativeModel(model_name)
+                for attempt in range(3):
+                    try:
+                        response = self.gemini_model.generate_content(prompt)
+                        break
+                    except Exception as e:
+                        if '429' in str(e) or 'Resource exhausted' in str(e):
+                            time.sleep(2 ** attempt)
+                        else: break
+                if response: break
+
+            if response is None or not response.candidates or not response.candidates[0].content.parts:
+                return "ERROR", transcript
+            
+            json_str = response.candidates[0].content.parts[0].text.strip()
+            # Basic cleanup if model adds markdown blocks
+            if json_str.startswith('```json'):
+                json_str = json_str.replace('```json', '').replace('```', '').strip()
+            elif json_str.startswith('```'):
+                json_str = json_str.replace('```', '').strip()
+            
+            # Verify it parses as JSON
+            try:
+                json.loads(json_str)
+                self.log(f'Extracted Sequential: {json_str}')
+                return json_str, transcript
+            except json.JSONDecodeError:
+                self.log(f'Gemini returned invalid JSON: {json_str}')
+                return "ERROR", transcript
+
+        except Exception as e:
+            self.log(f'ERROR in sequential extraction: {str(e)}')
+            return "ERROR", transcript
+
 
 class ItemExtractorROS:
     """ROS2 version with microphone recording capability."""

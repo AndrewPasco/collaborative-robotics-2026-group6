@@ -29,39 +29,33 @@ import sys
 from audio_item_detector import ItemExtractorBase, ItemExtractorROS, import_ros2
 
 
-def test_with_file(audio_file_path: str):
+def test_with_file(audio_file_path: str, sequential=False):
     """
     Test the detector with a pre-recorded audio file.
-    Simulates how the real system will use the detector with audio input.
-    
-    Args:
-        audio_file_path: Path to the WAV audio file
-        
-    Returns:
-        Extracted item name
     """
-    print(f'\n[TEST MODE: File-based Detection]')
+    mode_str = "Sequential (Payload+Destination)" if sequential else "Single Item"
+    print(f'\n[TEST MODE: File-based Detection - {mode_str}]')
     print(f'Audio file: {audio_file_path}')
     
     if not os.path.exists(audio_file_path):
         print(f'Error: File not found: {audio_file_path}')
         return None
     
-    # Initialize the detector (simulating stage 1 of real system)
     print('\nInitializing Audio Item Detector...')
     detector = ItemExtractorBase()
     
-    # Extract item from audio
-    print('\nProcessing audio to extract item name...')
-    item_name = detector.extract_item_from_audio(audio_file_path)
+    print('\nProcessing audio to extract information...')
+    if sequential:
+        result, transcript = detector.extract_sequential_from_audio(audio_file_path)
+    else:
+        result, transcript = detector.extract_item_from_audio(audio_file_path)
     
-    # Print result (simulating what would be passed to stage 2)
     print('\n' + '='*60)
-    print(f'EXTRACTED ITEM: "{item_name}"')
-    print(f'(This would be passed to the navigation/manipulation stage)')
+    print(f'RESULT: "{result}"')
+    print(f'TRANSCRIPT: "{transcript}"')
     print('='*60 + '\n')
     
-    return item_name
+    return result
 
 
 def test_with_recording(duration: float, api_key_path=None):
@@ -170,6 +164,11 @@ def main():
         default=5.0,
         help='Recording duration in seconds for live test (default: 5.0)'
     )
+    parser.add_argument(
+        '--sequential', '-s',
+        action='store_true',
+        help='Test sequential extraction (payload + destination)'
+    )
     args = parser.parse_args()
     
     print('='*60)
@@ -180,9 +179,10 @@ def main():
     try:
         if args.file:
             # Test with file
-            result = test_with_file(args.file)
+            result = test_with_file(args.file, sequential=args.sequential)
         else:
             # Test with live recording
+            # (Recording function would also need sequential flag update if we wanted live sequential test)
             result = test_with_recording(args.duration)
         
         # Exit with appropriate code
