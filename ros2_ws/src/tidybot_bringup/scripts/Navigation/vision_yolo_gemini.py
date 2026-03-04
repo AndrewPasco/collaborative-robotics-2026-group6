@@ -34,8 +34,8 @@ import json
 import base64
 import time
 from io import BytesIO
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 
 from sensor_msgs.msg import Image
@@ -284,6 +284,9 @@ class VisionYoloGemini(Node):
         frame = self._ros_image_to_cv2(msg)
         if frame is None:
             return
+        
+        # save raw frame for debugging
+        cv2.imwrite(f'/home/locobot/collaborative-robotics-2026-group6/ros2_ws/src/tidybot_bringup/scripts/Navigation/debuggging_saves/img_{self._frame_count}.jpg', frame)
 
         # 1. Run YOLO (every frame)
         if self.yolo_available:

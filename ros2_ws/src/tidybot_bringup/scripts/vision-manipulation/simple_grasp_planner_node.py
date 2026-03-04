@@ -87,6 +87,8 @@ class SimpleGraspPlannerNode(Node):
 
     def cloud_callback(self, msg):
         self.latest_cloud = msg
+        # self.get_logger().info(f"Latest cloud received with {len(pc2.read_points_numpy(msg, field_names=('x', 'y', 'z')))} points")
+        # self.get_logger().info(f"Latest cloud has points with z values: {pc2.read_points_numpy(msg, field_names=('z',))[:,0]}")
 
     def transform_points(self, cloud_msg, target_frame):
         """Manually transform point cloud points to target frame."""
@@ -138,11 +140,13 @@ class SimpleGraspPlannerNode(Node):
 
             # 2. Foreground Segmentation (Z-Filter relative to table)
             z_heights = points[:, 2]
-            table_level = np.percentile(z_heights, 10)
-            self.get_logger().info(f"table level: {table_level}")
+            # self.get_logger().info(f"z heights: {z_heights}")
+            # table_level = np.percentile(z_heights, 10)
+            # self.get_logger().info(f"table level: {table_level}")
             buffer = self.get_parameter("table_height_buffer").value
             
-            foreground = points[z_heights > (table_level + buffer)]
+            # foreground = points[z_heights > (table_level + buffer)]
+            foreground = points[z_heights > (buffer)]
             
             if len(foreground) < 5:
                 self.get_logger().warn("No foreground points detected above table level.")

@@ -147,7 +147,7 @@ class ManipulationExecutor(Node):
 
         # ─── Parameters ─────────────────────────────────────────────────
         self.declare_parameter("arm_name", "right")
-        self.declare_parameter("use_hardcoded_pose", True)
+        self.declare_parameter("use_hardcoded_pose", False)
         self.declare_parameter("use_motion_planner", True)
 
         self.arm_name = self.get_parameter("arm_name").value
@@ -550,7 +550,7 @@ class ManipulationExecutor(Node):
         request.target_pose = target_pose
         request.use_orientation = True
         request.execute = True  # IK only — we publish joint_cmd ourselves
-        request.duration = 2.0
+        request.duration = 5.0
         request.max_condition_number = 100.0
 
         self.get_logger().info(

@@ -406,9 +406,11 @@ class ManipulationExecutorNode(Node):
         # =================================================================
         if self.state == "OPEN_GRIPPER":
             self.gripper_value = GRIPPER_OPEN
-            if elapsed > GRIPPER_MIN_WAIT and self._gripper_is_open():
-                self.get_logger().info("  Gripper confirmed open.")
-                self._advance("MOVE_PREGRASP")
+            # if elapsed > GRIPPER_MIN_WAIT and self._gripper_is_open():
+            #     self.get_logger().info("  Gripper confirmed open.")
+            #     self._advance("MOVE_PREGRASP")
+            self.get_logger().info("  Gripper confirmed open.")
+            self._advance("MOVE_PREGRASP")
         # ── END CHANGE 11 ───────────────────────────────────────────────
 
         # =================================================================
