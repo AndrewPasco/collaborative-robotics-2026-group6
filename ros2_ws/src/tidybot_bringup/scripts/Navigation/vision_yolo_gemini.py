@@ -44,6 +44,7 @@ from std_msgs.msg import String
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy, qos_profile_sensor_data
 from cv_bridge import CvBridge
 from std_msgs.msg import Int32MultiArray
+from sensor_msgs.msg import RegionOfInterest
 
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURATION
@@ -64,13 +65,14 @@ CAMERA_MATRIX = np.array([
     [  0.0, 615.0, 240.0],
     [  0.0,   0.0,   1.0]
 ], dtype=np.float64)
+
 DIST_COEFFS = np.zeros((4, 1), dtype=np.float64)
 
 # AprilTag size (meters, half side length)
 TAG_HALF_SIZE = 0.075
 
 # How often to run Gemini (not every frame - too slow/expensive)
-GEMINI_QUERY_INTERVAL = 2.0  # seconds
+GEMINI_QUERY_INTERVAL = 5.0  # seconds
 
 
 class VisionYoloGemini(Node):
@@ -114,9 +116,14 @@ class VisionYoloGemini(Node):
             String, '/vision/detections', 10)
         self.annotated_pub = self.create_publisher(
             Image, '/vision/annotated_image', 10)
+        # self.target_bbox_pub = self.create_publisher(
+        #     Int32MultiArray,
+        #     '/vision/target_bbox',
+        #     10
+        # )
         self.target_bbox_pub = self.create_publisher(
-            Int32MultiArray,
-            '/vision/target_bbox',
+            RegionOfInterest,
+            "/vision/target_bbox",
             10
         )
 
@@ -447,18 +454,34 @@ Image dimensions are 640x480. Give pixel coordinates."""
 
 
             # ── For Pasco: Publish bbox + class id ──
+            # x1, y1, x2, y2 = best['bbox']
+            # cx = int(best['cx'])
+            # cy = int(best['cy'])
+            # w = int(x2 - x1)
+            # h = int(y2 - y1)
+
+            # class_name = best.get("class", "").lower()
+            # class_id = self.class_id_map.get(class_name, -1)
+
+            # bbox_msg = Int32MultiArray()
+            # bbox_msg.data = [cx, cy, w, h, class_id]
+            # self.target_bbox_pub.publish(bbox_msg)
+
             x1, y1, x2, y2 = best['bbox']
+
             cx = int(best['cx'])
             cy = int(best['cy'])
             w = int(x2 - x1)
             h = int(y2 - y1)
 
-            class_name = best.get("class", "").lower()
-            class_id = self.class_id_map.get(class_name, -1)
+            roi_msg = RegionOfInterest()
+            roi_msg.x_offset = int(cx - w / 2)
+            roi_msg.y_offset = int(cy - h / 2)
+            roi_msg.width = int(w)
+            roi_msg.height = int(h)
+            roi_msg.do_rectify = False
 
-            bbox_msg = Int32MultiArray()
-            bbox_msg.data = [cx, cy, w, h, class_id]
-            self.target_bbox_pub.publish(bbox_msg)
+            self.target_bbox_pub.publish(roi_msg)
 
 
             # Log when we publish a detection (once per second max)
