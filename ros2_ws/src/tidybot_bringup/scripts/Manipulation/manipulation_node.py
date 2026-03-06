@@ -486,7 +486,10 @@ class ManipulationExecutor(Node):
                     )
                 else:
                     # Task 3: lift to grasp + 15cm (IK via planner)
-                    self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
+                    if self.arm_name == "right":
+                        # twist
+                        # self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
+                        self.arm_cmd_sent = True
                 self.arm_cmd_sent = True
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Arm arrived at lift pose.")
