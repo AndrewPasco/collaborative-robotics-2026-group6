@@ -214,8 +214,16 @@ class ManipulationExecutor(Node):
             PoseStamped, "/grasp_planner/grasp_pose", self._grasp_pose_cb, 10,
             callback_group=self.cb_group,
         )
+
+        # From brain node: "grab" command triggers state machine
+        self.create_subscription(
+            String, "/brain/manipulation_goal", self._manipulation_goal_cb, 10,
+            callback_group=self.cb_group,
+        )
+
         self.get_logger().info(
-            "Listening on /detected_grasps/pose AND /grasp_planner/grasp_pose"
+            "Listening on /detected_grasps/pose, /grasp_planner/grasp_pose, "
+            "/brain/manipulation_goal"
         )
 
         # ================================================================
@@ -234,6 +242,9 @@ class ManipulationExecutor(Node):
 
         self.status_pub = self.create_publisher(
             String, "/manipulation/task_status", 10,
+        )
+        self.brain_status_pub = self.create_publisher(
+            String, "/brain/manipulation_status", 10,
         )
 
         # ================================================================
@@ -488,7 +499,13 @@ class ManipulationExecutor(Node):
                 fingers = self._get_finger_positions(arm)
                 self.get_logger().info(f"  Final gripper state (fingers: {fingers}).")
                 self._publish_status(REASON_SUCCESS)
-                self.get_logger().info(f"Pick sequence complete — result: {REASON_SUCCESS}")
+                # Notify brain node
+                brain_msg = String()
+                brain_msg.data = "done"
+                self.brain_status_pub.publish(brain_msg)
+                self.get_logger().info(
+                    f"Pick sequence complete — published 'done' to /brain/manipulation_status"
+                )
                 self.arm_cmd_sent = True
 
     # =====================================================================
@@ -669,16 +686,12 @@ class ManipulationExecutor(Node):
 
     def _grasp_pose_cb(self, msg: PoseStamped):
         """
-        Receives grasp pose and kicks off the state machine.
-        Accepts new poses when IDLE or DONE (so task3 can run a second arm).
+        Receives and stores grasp pose. Does NOT start the state machine —
+        that's triggered by /brain/manipulation_goal "grab" command.
         """
-        if self.state not in ("IDLE", "DONE"):
-            self.get_logger().warn("Already executing — ignoring new pose.")
-            return
-
         self.grasp_pose = msg.pose
         self.get_logger().info(
-            f"Grasp pose received ({self.arm_name} arm):  "
+            f"Grasp pose stored ({self.arm_name} arm):  "
             f"pos=({msg.pose.position.x:.3f}, "
             f"{msg.pose.position.y:.3f}, "
             f"{msg.pose.position.z:.3f})  "
@@ -686,6 +699,27 @@ class ManipulationExecutor(Node):
             f"{msg.pose.orientation.x:.3f}, "
             f"{msg.pose.orientation.y:.3f}, "
             f"{msg.pose.orientation.z:.3f})"
+        )
+
+    def _manipulation_goal_cb(self, msg: String):
+        """
+        From brain node: "grab" command starts the grasp state machine.
+        Only acts when IDLE or DONE (so task3 can run a second arm).
+        """
+        if msg.data.lower() != "grab":
+            self.get_logger().warn(f"Unknown manipulation goal: '{msg.data}'")
+            return
+
+        if self.state not in ("IDLE", "DONE"):
+            self.get_logger().warn("Already executing — ignoring 'grab' command.")
+            return
+
+        if self.grasp_pose is None:
+            self.get_logger().warn("Got 'grab' but no grasp pose stored yet!")
+            return
+
+        self.get_logger().info(
+            f"Brain sent 'grab' — starting state machine ({self.arm_name} arm)"
         )
         # Task 1: move to sleep pose first; Task 3: skip straight to open gripper
         if self.current_task == 0:
