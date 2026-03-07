@@ -4,7 +4,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def launch_setup(context, *args, **kwargs):
-    use_sim = LaunchConfiguration('use_sim').perform(context).lower() == 'true'
+    use_sim = LaunchConfiguration('use_sim').perform(context).lower() == 'false'
     depth_topic = "/camera/depth/image_raw" if use_sim else "/camera/aligned_depth_to_color/image_raw"
 
     # 1. Point Cloud Generator

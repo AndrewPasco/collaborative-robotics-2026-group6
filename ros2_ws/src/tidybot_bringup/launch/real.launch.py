@@ -237,6 +237,7 @@ def launch_setup(context, *args, **kwargs):
                 'base_frame_id': 'link',
                 'enable_color': True,
                 'enable_depth': True,
+                'align_depth.enable': True,
                 'enable_infra1': False,
                 'enable_infra2': False,
                 'publish_tf': True,
@@ -246,6 +247,7 @@ def launch_setup(context, *args, **kwargs):
             remappings=[
                 ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),
                 ('/camera/realsense/depth/image_rect_raw', '/camera/depth/image_raw'),
+                ('/camera/realsense/aligned_depth_to_color/image_raw', '/camera/aligned_depth_to_color/image_raw'),
                 ('/camera/realsense/color/camera_info', '/camera/color/camera_info'),
                 ('/camera/realsense/depth/camera_info', '/camera/depth/camera_info'),
             ]
