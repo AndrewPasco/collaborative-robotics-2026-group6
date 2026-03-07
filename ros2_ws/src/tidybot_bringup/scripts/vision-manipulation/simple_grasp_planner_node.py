@@ -90,8 +90,8 @@ class SimpleGraspPlannerNode(Node):
         # self.get_logger().info(f"Latest cloud received with {len(pc2.read_points_numpy(msg, field_names=('x', 'y', 'z')))} points")
         # self.get_logger().info(f"Latest cloud has points with z values: {pc2.read_points_numpy(msg, field_names=('z',))[:,0]}")
 
-    def transform_points(self, cloud_msg, target_frame):
-        """Manually transform point cloud points to target frame."""
+    def transform_points(self, cloud_msg, target_frame, roi=None):
+        """Manually transform point cloud points to target frame, with optional ROI cropping."""
         try:
             tf = self.tf_buffer.lookup_transform(
                 target_frame,
@@ -112,6 +112,21 @@ class SimpleGraspPlannerNode(Node):
         # Read points directly into numpy array (faster and avoids casting issues)
         points_raw = pc2.read_points_numpy(cloud_msg, field_names=("x", "y", "z"))
         
+        # ROI Cropping (only if cloud is organized)
+        if roi is not None and cloud_msg.height > 1:
+            h, w = cloud_msg.height, cloud_msg.width
+            points_grid = points_raw.reshape((h, w, 3))
+            
+            y_start = max(0, int(roi.y_offset))
+            y_end = min(h, int(roi.y_offset + roi.height))
+            x_start = max(0, int(roi.x_offset))
+            x_end = min(w, int(roi.x_offset + roi.width))
+            
+            points_raw = points_grid[y_start:y_end, x_start:x_end, :].reshape(-1, 3)
+
+        # Filter NaNs
+        points_raw = points_raw[~np.isnan(points_raw).any(axis=1)]
+        
         if len(points_raw) == 0:
             return None
             
@@ -128,11 +143,12 @@ class SimpleGraspPlannerNode(Node):
             return
         
         self.processing = True
-        self.get_logger().info(f"Generating simple {self.get_parameter('grasp_type').value} grasp...")
+        self.get_logger().info(f"Generating simple {self.get_parameter('grasp_type').value} grasp with ROI: "
+                               f"x={roi.x_offset}, y={roi.y_offset}, w={roi.width}, h={roi.height}...")
 
         try:
-            # 1. Transform points to base_link manually
-            points = self.transform_points(self.latest_cloud, self.base_frame)
+            # 1. Transform points to base_link manually (with ROI cropping)
+            points = self.transform_points(self.latest_cloud, self.base_frame, roi)
             
             if points is None or len(points) < 10:
                 self.get_logger().warn("Too few points in cloud.")
