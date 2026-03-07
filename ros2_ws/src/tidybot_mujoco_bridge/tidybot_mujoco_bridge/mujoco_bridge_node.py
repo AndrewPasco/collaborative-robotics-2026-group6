@@ -608,12 +608,6 @@ class MuJoCoBridgeNode(Node):
 
             self.tf_broadcaster.sendTransform(t)
 
-        # Outside the lock: trigger camera manually to avoid execution starvation
-        now_perf = time.perf_counter()
-        if now_perf - getattr(self, 'last_camera_time', 0.0) >= 1.0 / self.camera_rate:
-            self.last_camera_time = now_perf
-            self.camera_callback()
-
     def convert_intrinsics(self, img, K_old, K_new, new_size=(640, 480)):
         """Convert an image to a different set of camera intrinsics."""
         width, height = new_size

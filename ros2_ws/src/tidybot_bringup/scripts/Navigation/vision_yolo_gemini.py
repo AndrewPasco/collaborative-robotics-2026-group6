@@ -299,10 +299,8 @@ class VisionYoloGemini(Node):
         if self.yolo_available:
             self._run_yolo(frame)
 
-        # 2. Run Gemini (periodically, if target set and no YOLO match)
-        if (self.gemini_available and
-            self.target_query and
-            self.target_class is None):
+        # Gemini: rate-limited, only when target has no YOLO class match
+        if (self.gemini_available and self.target_query and self.target_class is None):
             self._run_gemini_if_needed(frame)
 
         # 3. Publish best detection for Navigator

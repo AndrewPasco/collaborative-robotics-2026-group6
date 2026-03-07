@@ -37,12 +37,12 @@
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
 
     <!-- Elevated platform for the object -->
-    <body name="platform" pos="0.5 -0.1 0.05">
+    <body name="platform" pos="0.5 0.0 0.05">
       <geom name="platform_geom" type="box" size="0.1 0.1 0.05" material="block_material" friction="1.0 1.0 1.0"/>
     </body>
 
     <!-- ADDED: Banana on top of the platform -->
-    <body name="banana" pos="0.5 -0.1 0.12">
+    <body name="banana" pos="0.5 0.0 0.12">
       <freejoint name="banana_joint"/>
       <!-- Visual: full-detail mesh (no collision) -->
       <geom name="banana_visual" type="mesh" mesh="banana_mesh" material="banana_mat"
@@ -60,7 +60,7 @@
     0 0.5                                                                  
     0 0 0 0 0 0 0.037 0.037                                              
     0 0 0 0 0 0 0.037 0.037
-    0.5 -0.1 0.12 0 0 0 0"                                                                                              
+    0.5 0.0 0.12 0 0 0 0"                                                                                              
     ctrl="0 0 1.5708 0 0.5 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037"/>                                                                         
   </keyframe>
 
