@@ -1,0 +1,30 @@
+# Configuration for gpd_ros2 node
+gpd_ros2:
+  ros__parameters:
+    # --- GPD Algorithm Parameters ---
+    num_samples: 1000                # Number of samples to use for grasp detection
+    num_threads: 4                   # Number of CPU threads to use
+    workspace: [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0] # [min_x, max_x, min_y, max_y, min_z, max_z] relative to camera frame
+
+    # --- Hand Geometry Parameters (Interbotix Gripper) ---
+    # These values are illustrative and should be tuned to the actual TidyBot2 gripper
+    finger_width: 0.012              # [m]
+    hand_outer_diameter: 0.12        # [m] - Total width of the hand when open
+    hand_depth: 0.06                 # [m] - Distance from palm to finger tips
+    hand_height: 0.02                # [m] - Thickness of the hand
+    init_bite: 0.01                  # [m] - Initial bite of the gripper (how much it can "reach into" an object)
+
+    # --- Camera Parameters ---
+    # Assuming point cloud is in the camera's optical frame
+    # These values are placeholders and may need to be adjusted or obtained dynamically
+    camera_frame: "camera_color_optical_frame" # TF frame of the camera
+    camera_position: [0.0, 0.0, 0.0]  # [x, y, z] position of camera in its own frame (usually 0,0,0)
+    
+    # --- Point Cloud Filtering ---
+    # Example: filter points below a certain height or outside a bounding box
+    # z_min_filter: 0.0              # [m] Minimum Z-value for points to be considered (relative to camera_frame)
+
+    # --- Grasp Visualization Parameters ---
+    # output_grasps_topic: "/gpd_grasps" # Topic to publish detected grasps
+    # point_cloud_topic: "/camera/depth_registered/points" # Input point cloud topic
+    

@@ -18,6 +18,8 @@ graph TD
     NavNode -- "/brain/navigation_status" --> BrainNode
     
     BrainNode -- "/brain/manipulation_goal" --> ManipNode[Manipulation Node]
+    BrainNode -- "/arm_status" --> ManipNode
+    BrainNode -- "/task_status" --> ManipNode
     ManipNode -- "/brain/manipulation_status" --> BrainNode
     
     NavNode -- "/base/target_pose" --> Sim[MuJoCo Bridge]
@@ -60,7 +62,10 @@ graph TD
 - **Target Switching**: The Brain Node manages the handoff from the payload target to the destination target once the `GRABBING` phase is complete.
 
 #### 3. Manipulation Pipeline
-- **Publishes**: `/brain/manipulation_goal` (String: `"grab"`, `"deposit"`)
+- **Publishes**: 
+  - `/brain/manipulation_goal` (String: `"grab"`, `"deposit"`)
+  - `/arm_status` (Int32: `0=left`, `1=right`) — set on startup
+  - `/task_status` (Int32: `0=task1/2`, `1=task3`) — set on startup
 - **Subscribes**: `/brain/manipulation_status` (String: `"idle"`, `"executing"`, `"done"`, `"failed"`)
 - **Wait Behavior**: Brain transitions to the next state ONLY when status is `"done"`.
 - **Deposit Logic**: The `deposit` command triggers a specific sequence: *Vertical lift -> Align with bin -> Release -> Retract*.

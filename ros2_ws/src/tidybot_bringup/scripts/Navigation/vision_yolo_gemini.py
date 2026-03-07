@@ -38,11 +38,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point, Pose
 from std_msgs.msg import String
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy, qos_profile_sensor_data
 from cv_bridge import CvBridge
+from std_msgs.msg import Int32MultiArray
+from sensor_msgs.msg import RegionOfInterest
 
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURATION
@@ -63,6 +66,7 @@ CAMERA_MATRIX = np.array([
     [  0.0, 615.0, 240.0],
     [  0.0,   0.0,   1.0]
 ], dtype=np.float64)
+
 DIST_COEFFS = np.zeros((4, 1), dtype=np.float64)
 
 # AprilTag size (meters, half side length)
@@ -70,6 +74,10 @@ TAG_HALF_SIZE = 0.075
 
 # How often to run Gemini (not every frame - too slow/expensive)
 GEMINI_QUERY_INTERVAL = 2.0  # seconds
+
+# Maximum rate to publish the annotated debug image (Hz)
+_ANNOTATED_MAX_HZ = 20.0
+_ANNOTATED_MIN_PERIOD = 1.0 / _ANNOTATED_MAX_HZ
 
 
 class VisionYoloGemini(Node):
@@ -113,14 +121,24 @@ class VisionYoloGemini(Node):
             String, '/vision/detections', 10)
         self.annotated_pub = self.create_publisher(
             Image, '/vision/annotated_image', 10)
+        self.target_bbox_pub = self.create_publisher(
+            RegionOfInterest,
+            "/vision/target_bbox",
+            10
+        )
+
+        self.class_id_map = {
+            "bottle": 0,
+            "cap": 1,
+            "banana": 2
+        }
 
         self.cv_bridge = CvBridge()
 
         # ── Subscribers ──
-        # Use sensor_data QoS profile for camera (BEST_EFFORT, VOLATILE)
         self.create_subscription(
             Image, '/camera/color/image_raw',
-            self.image_cb, qos_profile_sensor_data)
+            self.image_cb, 5)
         self.create_subscription(
             String, '/vision/target',
             self.target_cb, 10)
@@ -152,9 +170,30 @@ class VisionYoloGemini(Node):
                 urllib.request.urlretrieve(url, model_path)
                 self.get_logger().info(f'Download complete: {model_path}')
 
-            self.yolo_model = YOLO(model_path)
+            import torch
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.get_logger().info(f'Using device: {device}')
+            
+            self.yolo_model = YOLO(model_path).to(device)
             self.yolo_available = True
-            self.get_logger().info(f'YOLO loaded: {model_path}')
+            self.device = device
+            
+            # Pre-bake device / precision into the model's overrides so they
+            # are NOT re-validated on every single predict() call.
+            self.yolo_model.overrides.update({
+                'device':  device,
+                'conf':    YOLO_CONFIDENCE,
+                'verbose': False,
+            })
+
+            self.get_logger().info('Warming up YOLO...')
+            dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
+            self.yolo_model.predict(dummy_frame)
+
+            yolo_classes = list(self.yolo_model.names.values())
+            self.get_logger().info(f'YOLO classes (best.pt): {yolo_classes}')
+            actual_device = next(self.yolo_model.model.parameters()).device
+            self.get_logger().info(f'YOLO loaded on {actual_device}: {model_path}')
         except ImportError:
             self.get_logger().warn(
                 'ultralytics not installed. Run: pip install ultralytics')
@@ -232,39 +271,29 @@ class VisionYoloGemini(Node):
 
     def image_cb(self, msg: Image):
         """Process each camera frame."""
-        # 1. Drop Stale Frames to Prevent ROS Queue Backlog
-        # The camera publishes at 3 Hz (or higher). Inference takes time.
-        # If we process every frame sequentially from the queue, we get further and further
-        # behind real time. We want to process only the ABSOLUTE NEWEST frame.
-        
-        # Calculate frame age using ROS header stamp vs local clock
-        frame_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        # In simulation, we must use SIM TIME.
-        now_time = self.get_clock().now().nanoseconds * 1e-9
-        age = now_time - frame_time
-        
-        # Initialize attributes if this is the first frame
-        if not hasattr(self, '_last_log_time'): self._last_log_time = 0.0
         if not hasattr(self, '_frame_count'): self._frame_count = 0
+        if not hasattr(self, '_last_log_time'): self._last_log_time = 0.0
         self._frame_count += 1
+        self.get_logger().info(f'Frame {self._frame_count} received')
 
-        # Log every ~1 second to show activity
-        if now_time - self._last_log_time >= 1.0:
-            self._last_log_time = now_time
+        now = self.get_clock().now().nanoseconds * 1e-9
+        msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        age = now - msg_time if msg_time > 0 else 0.0
+
+        if now - self._last_log_time >= 1.0:
+            self._last_log_time = now
             yolo_classes = [d['class'] for d in self.latest_detections] if self.latest_detections else []
             self.get_logger().info(
                 f'Frame {self._frame_count} | age: {age:.2f}s | target: {self.target_query} | '
                 f'target_class: {self.target_class} | '
                 f'YOLO sees: {yolo_classes}')
 
-        # Drop the frame if it's too old (we only want the freshest frame)
-        # For a 3Hz camera (0.33s interval), 0.25s age means the frame is nearly stale.
-        if age > 0.25:
-            return
-
         frame = self._ros_image_to_cv2(msg)
         if frame is None:
             return
+        
+        # save raw frame for debugging
+        # cv2.imwrite(f'/home/locobot/collaborative-robotics-2026-group6/ros2_ws/src/tidybot_bringup/scripts/Navigation/debuggging_saves/img_{self._frame_count}.jpg', frame)
 
         # 1. Run YOLO (every frame)
         if self.yolo_available:
@@ -285,7 +314,11 @@ class VisionYoloGemini(Node):
         # 5. Publish all detections as JSON
         self._publish_detections_json()
 
-        # 6. Publish annotated image for debugging
+        # Annotated image: gated by subscriber count and rate-limited to 5 Hz
+        _now = time.time()
+        if (self.annotated_pub.get_subscription_count() > 0 and
+                _now - getattr(self, '_last_annotated_time', 0.0) >= _ANNOTATED_MIN_PERIOD):
+            self._last_annotated_time = _now
         self._publish_annotated_image(frame, msg.header)
 
     # ═══════════════════════════════════════════════════════════
@@ -294,7 +327,13 @@ class VisionYoloGemini(Node):
 
     def _run_yolo(self, frame: np.ndarray):
         """Run YOLO object detection."""
-        results = self.yolo_model(frame, conf=YOLO_CONFIDENCE, verbose=False)
+        # Diagnostic: Log resolution once
+        if not hasattr(self, '_logged_res'):
+            h, w = frame.shape[:2]
+            self.get_logger().info(f'Input frame resolution: {w}x{h}')
+            self._logged_res = True
+        
+        results = self.yolo_model.predict(frame)
 
         self.latest_detections = []
         for r in results:
@@ -304,7 +343,7 @@ class VisionYoloGemini(Node):
                 cls_name = self.yolo_model.names[cls_id]
                 conf = float(box.conf[0])
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
-                
+
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
                 area = (x2 - x1) * (y2 - y1)
@@ -412,21 +451,41 @@ Image dimensions are 640x480. Give pixel coordinates."""
             if best is None and self.gemini_result:
                 best = self.gemini_result
 
-        # If no target set, just use largest detection
-        if not self.target_query and best is None and self.latest_detections:
-            best = max(self.latest_detections, key=lambda d: d['area'])
+        # NOTE: do NOT publish when target_query is None.
+        # Publishing a fallback "largest object" with no target set would
+        # send the navigator chasing random objects immediately on startup.
 
-        # Publish
+        # Publish only when a target has been requested and matched
         if best:
             det = Point()
             det.x = float(best['cx'])
             det.y = float(best['cy'])
             det.z = float(best['area'])
             self.detection_pub.publish(det)
+
+
+            # ── For Pasco: Publish bbox + class id ──
+            x1, y1, x2, y2 = best['bbox']
+
+            cx = int(best['cx'])
+            cy = int(best['cy'])
+            w = int(x2 - x1)
+            h = int(y2 - y1)
+
+            roi_msg = RegionOfInterest()
+            roi_msg.x_offset = int(cx - w / 2)
+            roi_msg.y_offset = int(cy - h / 2)
+            roi_msg.width = int(w)
+            roi_msg.height = int(h)
+            roi_msg.do_rectify = False
+
+            self.target_bbox_pub.publish(roi_msg)
+
+
             # Log when we publish a detection (once per second max)
             import time as _t
             _now = _t.time()
-            if _now - getattr(self, '_last_det_log', 0) >= 1.0:
+            if _now - getattr(self, '_last_det_log', 0) >= 0.1:
                 self._last_det_log = _now
                 self.get_logger().info(
                     f'Published detection: {best.get("class","?")} '

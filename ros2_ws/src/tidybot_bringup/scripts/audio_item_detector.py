@@ -271,9 +271,9 @@ Result:"""
             
             # Use same model chain logic as single extraction
             model_chain = [
+                'models/gemini-3-flash-preview',
                 'models/gemini-2.0-flash-lite',
-                'models/gemini-2.0-flash',
-                'models/gemini-3-flash-preview'
+                'models/gemini-2.0-flash'
             ]
             
             response = None

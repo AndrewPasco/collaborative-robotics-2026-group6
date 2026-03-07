@@ -37,7 +37,7 @@ import time
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import String, Float64MultiArray
+from std_msgs.msg import String, Float64MultiArray, Int32
 from tidybot_msgs.msg import ArmCommand
 
 
@@ -61,6 +61,10 @@ class ManipulationNode(Node):
         # ── Communication with brain ────────────────────────────────
         self.status_pub = self.create_publisher(String, '/brain/manipulation_status', 10)
         self.create_subscription(String, '/brain/manipulation_goal', self._goal_cb, 10)
+        
+        # Metadata from brain (for real robot parity)
+        self.create_subscription(Int32, '/arm_status', self._arm_status_cb, 10)
+        self.create_subscription(Int32, '/task_status', self._task_status_cb, 10)
 
         # ── Low-level publishers ────────────────────────────────────
         self.arm_pub     = self.create_publisher(ArmCommand,        '/right_arm/cmd',     10)
@@ -70,6 +74,9 @@ class ManipulationNode(Node):
         self.current_goal = None
         self.sub_state = 'IDLE'  # IDLE, REACHING, CLOSING, RETRACTING, OPENING, HOMING, LIFTING
         self.state_start_time = time.time()
+        
+        self.active_arm = 'right'  # 0=left, 1=right
+        self.current_task = 0      # 0=task1/2, 1=task3
 
         # ── Control loop (50 Hz) ────────────────────────────────────
         self.dt = 0.02
@@ -114,6 +121,20 @@ class ManipulationNode(Node):
             self.get_logger().warn(f'Unknown goal: "{goal}"')
             self.sub_state = 'IDLE'
             self._publish_status('failed')
+
+    def _arm_status_cb(self, msg: Int32):
+        """Metadata from brain: 0=left, 1=right."""
+        self.active_arm = 'left' if msg.data == 0 else 'right'
+        # Update publishers based on active arm
+        self.arm_pub = self.create_publisher(ArmCommand, f'/{self.active_arm}_arm/cmd', 10)
+        self.gripper_pub = self.create_publisher(Float64MultiArray, f'/{self.active_arm}_gripper/cmd', 10)
+        self.get_logger().info(f'Placeholder acknowledging active arm: {self.active_arm}')
+
+    def _task_status_cb(self, msg: Int32):
+        """Metadata from brain: 0=task1/2, 1=task3."""
+        self.current_task = msg.data
+        task_label = "Task 3" if msg.data == 1 else "Task 1 or 2"
+        self.get_logger().info(f'Placeholder acknowledging task: {task_label}')
 
     # ── Helpers ─────────────────────────────────────────────────────
 

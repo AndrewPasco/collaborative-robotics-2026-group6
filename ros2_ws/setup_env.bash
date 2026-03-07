@@ -65,6 +65,10 @@ fi
 export TIDYBOT_REPO_ROOT="$PROJECT_ROOT"
 echo "✓ Set TIDYBOT_REPO_ROOT=$PROJECT_ROOT"
 
+# 3.2. Add /usr/local/lib to LD_LIBRARY_PATH (for GPD and other custom libs)
+export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
+echo "✓ Added /usr/local/lib to LD_LIBRARY_PATH"
+
 # 3.5. Set tidybot2 path for Phoenix 6 base controller
 export TIDYBOT2_PATH="/home/locobot/tidybot2"
 echo "✓ Set TIDYBOT2_PATH=$TIDYBOT2_PATH"

@@ -32,7 +32,7 @@ from enum import Enum, auto
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Int32
 from sensor_msgs.msg import JointState
 
 
@@ -61,6 +61,8 @@ class BrainNodeTask2(Node):
         self.speech_goal_pub = self.create_publisher(String, '/brain/speech_goal',       10)
         self.nav_goal_pub    = self.create_publisher(String, '/brain/navigation_goal',   10)
         self.manip_goal_pub  = self.create_publisher(String, '/brain/manipulation_goal', 10)
+        self.arm_status_pub  = self.create_publisher(Int32,  '/arm_status',             10)
+        self.task_status_pub = self.create_publisher(Int32,  '/task_status',            10)
 
         # ── Status subscribers ──────────────────────────────────────
         self.speech_result = None
@@ -102,6 +104,16 @@ class BrainNodeTask2(Node):
         if self.control_timer is not None:
             return
         self.get_logger().info('Starting control loop.')
+        
+        # Initialize manipulation status for the real robot node
+        arm_msg = Int32()
+        arm_msg.data = 1  # 1 = right arm
+        self.arm_status_pub.publish(arm_msg)
+        
+        task_msg = Int32()
+        task_msg.data = 0  # 0 = task 1 or 2
+        self.task_status_pub.publish(task_msg)
+
         self.state_start_time = time.time()
         self.control_timer = self.create_timer(1.0, self._control_loop)
 

@@ -43,13 +43,24 @@ install(PROGRAMS
   scripts/brain_node.py
   scripts/brain_node_task2.py
   scripts/navigation_node.py
-  scripts/manipulation_node.py
+  scripts/manipulation_node_placeholder.py
   scripts/speech_node.py
-  scripts/vision-manipulation/grasp_planner_node.py
   scripts/Navigation/navigator.py
   scripts/Navigation/vision_nav.py
   scripts/Navigation/vision_yolo_gemini.py
+  scripts/Manipulation/modular_manipulation_executor_node.py
+  scripts/Manipulation/manipulation_executor_node.py
+  scripts/Manipulation/manipulation_node.py
+  scripts/vision-manipulation/grasp_trigger_node.py
+  scripts/vision-manipulation/pointnet_gpd_node.py
+  scripts/vision-manipulation/contact_graspnet_node.py
+  scripts/vision-manipulation/simple_grasp_planner_node.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install Contact-GraspNet as a package directory
+install(DIRECTORY scripts/vision-manipulation/contact_graspnet/
+  DESTINATION lib/${PROJECT_NAME}/contact_graspnet
 )
 
 ament_package()

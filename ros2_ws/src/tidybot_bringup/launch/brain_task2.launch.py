@@ -16,12 +16,13 @@ Launches the FULL system for Task 2: Sequential Pick-and-Place.
    - brain_node_task2  (Task 2 state machine orchestrator)
 
 Usage:
-    ros2 launch tidybot_bringup brain_task2.launch.py show_mujoco_viewer:=true use_rviz:=true
+ros2 launch tidybot_bringup brain_task2.launch.py show_mujoco_viewer:=true use_rviz:=true
+
 Without sim:
-    ros2 launch tidybot_bringup brain_task2.launch.py use_sim:=false
+ros2 launch tidybot_bringup brain_task2.launch.py use_sim:=false
 
 Start task:
-    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio_sequential /home/mete/collaborative-robotics-2026-group6/examples/banana_bowl.wav'}"
 """
@@ -78,18 +79,13 @@ def generate_launch_description():
     )
 
     # ── Brain-specific nodes ────────────────────────────────────────
-    microphone = Node(
-        package='tidybot_control',
-        executable='microphone_node',
-        name='microphone_node',
-        output='screen',
-    )
 
     speech = Node(
         package='tidybot_bringup',
         executable='speech_node.py',
         name='speech_node',
         output='screen',
+        # parameters=[{'use_sim_time': True}]
     )
 
     navigation = Node(
@@ -97,13 +93,16 @@ def generate_launch_description():
         executable='navigator.py',
         name='navigation_node',
         output='screen',
+        # parameters=[{'use_sim_time': True}]
     )
 
     manipulation = Node(
         package='tidybot_bringup',
-        executable='manipulation_node.py',
+        # executable='manipulation_node.py',             # <-- Switch to this for full IK/Grasping node
+        executable='manipulation_node_placeholder.py',    # <-- Using placeholder for now
         name='manipulation_node',
         output='screen',
+        # parameters=[{'use_sim_time': True}]
     )
 
     vision = Node(
@@ -111,6 +110,7 @@ def generate_launch_description():
         executable='vision_yolo_gemini.py',
         name='vision_node',
         output='screen',
+        # parameters=[{'use_sim_time': True}]
     )
 
     brain = Node(
@@ -118,6 +118,7 @@ def generate_launch_description():
         executable='brain_node_task2.py',
         name='brain_node_task2',
         output='screen',
+        # parameters=[{'use_sim_time': True}]
     )
 
     return LaunchDescription([
@@ -129,7 +130,6 @@ def generate_launch_description():
         # Simulation layer
         sim_launch,
         # Brain layer
-        microphone,
         speech,
         navigation,
         vision,

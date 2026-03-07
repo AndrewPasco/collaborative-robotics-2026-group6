@@ -22,7 +22,7 @@ Setup:
   6. ros2 run tidybot_bringup navigator.py
   
 # 1. Start the simulation
-ros2 launch tidybot_bringup sim.launch.py scene:=scene_pickup.xml use_rviz:=true show_mujoco_viewer:=true
+ros2 launch tidybot_bringup sim.launch.py scene:=scene_task2.xml use_rviz:=true show_mujoco_viewer:=true
 
 # 2. Run the Vision node
 ros2 run tidybot_bringup vision_yolo_gemini.py
@@ -88,7 +88,7 @@ KP_ODOM_LINEAR  = 0.8
 KP_ODOM_ANGULAR = 1.5
 
 # --- Fine-centering (after coarse approach) ---
-FINE_CENTERING_DEADZONE = 3   # pixels — tighter than coarse CENTERING_DEADZONE (5px)
+FINE_CENTERING_DEADZONE = 5   # pixels — tighter than coarse CENTERING_DEADZONE (5px)
 FINE_CENTERING_HOLD     = 0.5 # seconds centred before advancing
 
 # --- Final approach (odom-based, no YOLO) ---
@@ -133,7 +133,7 @@ class Navigator(Node):
         # ── Object detection (from Vision node — HW2 P3/P4 output) ──
         self.latest_detection = None       # Point(x=px, y=py, z=area)
         self.detection_stamp = 0.0
-        self.detection_timeout = 3.0       # seconds — longer to survive manual testing gaps
+        self.detection_timeout = 5.0       # seconds — longer to survive manual testing gaps
 
         # ── AprilTag pose (from Vision node — HW2 P6 solvePnP output) ──
         self.apriltag_pose = None          # Pose with position = tvec

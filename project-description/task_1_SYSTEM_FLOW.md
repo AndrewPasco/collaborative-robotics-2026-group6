@@ -18,6 +18,8 @@ graph TD
     NavNode -- "/brain/navigation_status" --> BrainNode
     
     BrainNode -- "/brain/manipulation_goal" --> ManipNode[Manipulation Node]
+    BrainNode -- "/arm_status" --> ManipNode
+    BrainNode -- "/task_status" --> ManipNode
     ManipNode -- "/brain/manipulation_status" --> BrainNode
     
     NavNode -- "/base/target_pose" --> Sim[MuJoCo Bridge]
@@ -58,7 +60,10 @@ graph TD
 - **Sync Note**: Navigation node drives to specific coordinates (e.g., `1.0, 1.0`) and waits for the simulation's `/base/goal_reached` topic before reporting arrival.
 
 #### 3. Manipulation Pipeline
-- **Publishes**: `/brain/manipulation_goal` (String: `"grab"`, `"release"`)
+- **Publishes**: 
+  - `/brain/manipulation_goal` (String: `"grab"`, `"release"`)
+  - `/arm_status` (Int32: `0=left`, `1=right`) — set on startup
+  - `/task_status` (Int32: `0=task1/2`, `1=task3`) — set on startup
 - **Subscribes**: `/brain/manipulation_status` (String: `"idle"`, `"executing"`, `"done"`, `"failed"`)
 - **Wait Behavior**: Brain transitions to the next state ONLY when status is `"done"`.
 - **Sequence Note**: The `grab` goal triggers a monolithic sequence: *Reach (IK) -> Grasp -> Retract*.

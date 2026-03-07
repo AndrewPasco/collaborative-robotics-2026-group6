@@ -17,7 +17,7 @@ Usage:
     python test_stt.py --file /mnt/hgfs/CS339R/Lab/apple.wav
     
     # Test with live microphone recording (requires ROS2 microphone service)
-    python test_stt.py --duration 5.0
+    uv run python ros2_ws/src/tidybot_bringup/scripts/test_stt.py --duration 5.0
 
 Author: TidyBot Team
 Date: February 2026
@@ -87,11 +87,11 @@ def test_with_recording(duration: float, api_key_path=None):
     print('Initializing ROS2...')
     rclpy.init()
     
+    detector = None
     try:
         # Initialize the detector (simulating stage 1 of real system)
         print('Initializing Audio Item Detector with ROS2...')
         detector = ItemExtractorROS(
-            api_key_path=api_key_path,
             rclpy_module=rclpy,
             Node=Node,
             AudioRecord=AudioRecord
@@ -136,7 +136,8 @@ def test_with_recording(duration: float, api_key_path=None):
         return None
     finally:
         # Cleanup
-        detector.destroy_node()
+        if detector:
+            detector.destroy_node()
         rclpy.shutdown()
         print('\nROS2 shutdown complete.')
 

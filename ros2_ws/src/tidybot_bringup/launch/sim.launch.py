@@ -32,6 +32,7 @@ def launch_setup(context, *args, **kwargs):
     show_mujoco_viewer = LaunchConfiguration('show_mujoco_viewer')
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_motion_planner = LaunchConfiguration('use_motion_planner')
+    use_microphone = LaunchConfiguration('use_microphone')
     camera_rate = LaunchConfiguration('camera_rate').perform(context)
 
     # Package paths
@@ -128,6 +129,20 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
+    # Microphone recording node
+    microphone = Node(
+        package='tidybot_control',
+        executable='microphone_node',
+        name='microphone',
+        output='screen',
+        condition=IfCondition(use_microphone),
+        parameters=[{
+            'sample_rate': 16000,
+            'channels': 1,
+            'device_index': -1,
+        }]
+    )
+
     return [
         robot_state_publisher,
         mujoco_bridge,
@@ -135,6 +150,7 @@ def launch_setup(context, *args, **kwargs):
         left_arm_controller,
         motion_planner,
         rviz,
+        microphone,
     ]
 
 
@@ -170,6 +186,11 @@ def generate_launch_description():
         description='Camera publish rate in Hz (e.g. 1.0 for low bandwidth)'
     )
 
+    declare_use_microphone = DeclareLaunchArgument(
+        'use_microphone', default_value='true',
+        description='Launch microphone recording node'
+    )
+
     return LaunchDescription([
         # Arguments
         declare_scene,
@@ -178,6 +199,7 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_use_planner,
         declare_camera_rate,
+        declare_use_microphone,
         # Nodes via OpaqueFunction (resolved after arguments)
         OpaqueFunction(function=launch_setup),
     ])

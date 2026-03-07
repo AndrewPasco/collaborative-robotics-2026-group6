@@ -49,6 +49,7 @@ class SpeechNode(Node):
     def _goal_cb(self, msg: String):
         """Callback runs in Main Thread. Spawns Worker Thread."""
         goal = msg.data.strip()
+        test_file = None
         
         if goal.lower() == 'listen':
             self.mode = 'single'

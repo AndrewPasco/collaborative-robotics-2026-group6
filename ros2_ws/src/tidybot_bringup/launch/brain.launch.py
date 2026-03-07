@@ -12,16 +12,16 @@ Launches the FULL system in one command:
    - speech_node       (audio recording + item extraction)
    - navigation_node   (base movement)
    - manipulation_node (arm / gripper control)
-   - brain_node        (state machine orchestrator)
+   - brain_node        (state machine orchestrator) 
 
 Usage:
-    ros2 launch tidybot_bringup brain.launch.py scene:=scene_pickup.xml show_mujoco_viewer:=true use_rviz:=true
+ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true
 Without sim:
-    ros2 launch tidybot_bringup brain.launch.py use_sim:=false
-    
-    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
+ros2 launch tidybot_bringup brain.launch.py use_sim:=false
+
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
-    ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /home/mete/collaborative-robotics-2026-group6/examples/banana.wav'}"
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /home/mete/collaborative-robotics-2026-group6/examples/banana.wav'}"
 """
 
 import os
@@ -70,12 +70,12 @@ def generate_launch_description():
     )
 
     # ── Brain-specific nodes ────────────────────────────────────────
-    microphone = Node(
-        package='tidybot_control',
-        executable='microphone_node',
-        name='microphone_node',
-        output='screen',
-    )
+    # microphone = Node(
+    #     package='tidybot_control',
+    #     executable='microphone_node',
+    #     name='microphone_node',
+    #     output='screen',
+    # )
 
     speech = Node(
         package='tidybot_bringup',
@@ -93,7 +93,8 @@ def generate_launch_description():
 
     manipulation = Node(
         package='tidybot_bringup',
-        executable='manipulation_node.py',
+        # executable='manipulation_node.py',
+        executable = 'manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
     )
@@ -120,7 +121,7 @@ def generate_launch_description():
         # Simulation layer
         sim_launch,
         # Brain layer
-        microphone,
+        # microphone,
         speech,
         navigation,
         vision,
