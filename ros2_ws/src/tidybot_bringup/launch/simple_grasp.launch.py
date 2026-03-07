@@ -30,6 +30,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{
             'grasp_type': LaunchConfiguration('grasp_type'),
             'table_height_buffer': 0.01,
+            'use_sim_time': True, # REMOVE FOR REAL
         }]
     )
 

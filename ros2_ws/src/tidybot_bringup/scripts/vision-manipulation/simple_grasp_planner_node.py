@@ -41,12 +41,14 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2, PointField, RegionOfInterest
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Point
 from tidybot_msgs.srv import PlanToTarget
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
 import tf2_ros
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
+from visualization_msgs.msg import Marker
 
 class SimpleGraspPlannerNode(Node):
     def __init__(self):
@@ -56,8 +58,8 @@ class SimpleGraspPlannerNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("table_height_buffer", 0.01)  # 1cm above table is object
         self.declare_parameter("grasp_type", "top")          # "top" or "side"
-        self.declare_parameter("depth_adjust", 0.01)        # how much to set gripper position back
-        self.declare_parameter("height_adjust", 0.065)       # how much to raise gripper pose above object
+        self.declare_parameter("depth_adjust", 0.0)        # how much to set gripper position back
+        self.declare_parameter("height_adjust", 0.0)       # how much to raise gripper pose above object
         self.declare_parameter("send_plan_request", False)   # Option to call planner directly
         
         self.base_frame = self.get_parameter("base_frame").value
@@ -75,8 +77,9 @@ class SimpleGraspPlannerNode(Node):
             RegionOfInterest, "/vision/target_bbox", self.trigger_callback, 10
         )
         self.pose_pub = self.create_publisher(PoseStamped, "/detected_grasps/pose", 10)
-        self.rviz_pub = self.create_publisher(PoseStamped, "/detected_grasps/rviz_pose", 10)
+        self.rviz_pub = self.create_publisher(PoseStamped, "/detected_grasps/rviz_pose_new", 10)
         self.foreground_pub = self.create_publisher(PointCloud2, "/detected_grasps/foreground_cloud", 10)
+        self.axis_marker_pub = self.create_publisher(Marker, "/detected_grasps/pca_axis", 10)
 
         # --- Service Clients ---
         self.plan_client = self.create_client(PlanToTarget, '/plan_to_target')
@@ -140,6 +143,7 @@ class SimpleGraspPlannerNode(Node):
 
     def trigger_callback(self, roi):
         if self.processing or self.latest_cloud is None:
+            self.get_logger().info("Not executing")
             return
         
         self.processing = True
@@ -153,16 +157,40 @@ class SimpleGraspPlannerNode(Node):
             if points is None or len(points) < 10:
                 self.get_logger().warn("Too few points in cloud.")
                 return
+            
+            # # ==========================================
+            # # DEBUG: Generate and save Z-value heatmap
+            # # ==========================================
+            # # Extract X, Y, and Z columns
+            # x = points[:, 0]
+            # y = points[:, 1]
+            # z_heights = points[:, 2]
+
+            # plt.figure(figsize=(8, 6))
+            # # Scatter plot acting as a top-down heatmap. 'c' maps the colors to Z values.
+            # scatter = plt.scatter(x, y, c=z_heights, cmap='viridis', s=5, alpha=0.8)
+            # plt.colorbar(scatter, label='Z Height (meters)')
+            # plt.xlabel(f'X in {self.base_frame} (m)')
+            # plt.ylabel(f'Y in {self.base_frame} (m)')
+            # plt.title('Top-Down Heatmap of Z-Values')
+            # plt.axis('equal') # Ensures spatial proportions aren't distorted
+            
+            # # Save the plot to the /tmp directory
+            # heatmap_path = '/tmp/grasp_z_heatmap.png'
+            # plt.savefig(heatmap_path)
+            # plt.close() # Free up memory
+            # self.get_logger().info(f"Saved Z-heatmap to {heatmap_path}")
+            # # ==========================================
 
             # 2. Foreground Segmentation (Z-Filter relative to table)
             z_heights = points[:, 2]
             # self.get_logger().info(f"z heights: {z_heights}")
-            # table_level = np.percentile(z_heights, 10)
-            # self.get_logger().info(f"table level: {table_level}")
+            table_level = np.percentile(z_heights, 10)
+            self.get_logger().info(f"table level: {table_level}")
             buffer = self.get_parameter("table_height_buffer").value
             
-            # foreground = points[z_heights > (table_level + buffer)]
-            foreground = points[z_heights > (buffer)]
+            foreground = points[z_heights > (table_level + buffer)]
+            # foreground = points[z_heights > (buffer)]
             
             if len(foreground) < 5:
                 self.get_logger().warn("No foreground points detected above table level.")
@@ -172,13 +200,26 @@ class SimpleGraspPlannerNode(Node):
             centroid = np.mean(foreground, axis=0)
             self.get_logger().info(f"Object Centroid: {centroid}")
 
-            # --- Debug: Publish Foreground Cloud ---
-            foreground_msg = pc2.create_cloud_xyz32(
-                self.latest_cloud.header, 
-                foreground.tolist()
-            )
-            foreground_msg.header.frame_id = self.base_frame
-            self.foreground_pub.publish(foreground_msg)
+            # Calculate Yaw via 2D PCA
+            # Extract just the X and Y columns
+            xy_points = foreground[:, :2]
+            
+            # Mean center the points
+            centered_xy = xy_points - centroid[:2]
+            
+            # Calculate the covariance matrix
+            cov_matrix = np.cov(centered_xy, rowvar=False)
+            
+            # Calculate eigenvectors
+            _, eigenvectors = np.linalg.eigh(cov_matrix)
+            
+            # np.linalg.eigh sorts eigenvalues in ascending order.
+            # The last column is the eigenvector for the largest eigenvalue (Major Axis)
+            major_axis = eigenvectors[:, 1]
+            
+            # Calculate the yaw angle in radians
+            yaw_rad = np.arctan2(major_axis[1], major_axis[0])
+            self.get_logger().info(f"Calculated PCA Yaw: {np.degrees(yaw_rad):.2f} degrees")
 
             # 4. Apply Heuristics
             grasp_msg = PoseStamped()
@@ -193,7 +234,53 @@ class SimpleGraspPlannerNode(Node):
                 grasp_msg.pose.position.y = centroid[1] - self.get_parameter("depth_adjust").value
                 grasp_msg.pose.position.z = centroid[2] + self.get_parameter("height_adjust").value
                 
-                q = R.from_euler('xyz', [0, 90, 0], degrees=True).as_quat()
+                base_rot = R.from_euler('xyz', [0, 90, 0], degrees=True)
+
+                yaw = R.from_euler('x', yaw_rad, degrees=False)
+
+                # Publish RViz Arrow Marker for Major Axis
+                marker = Marker()
+                marker.header.frame_id = self.base_frame
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "pca_axis"
+                marker.id = 0
+                marker.type = Marker.ARROW
+                marker.action = Marker.ADD
+
+                # Start point (Centroid)
+                p1 = Point()
+                p1.x = float(centroid[0])
+                p1.y = float(centroid[1])
+                p1.z = float(centroid[2])
+
+                # End point (Projected 10cm along the 2D major axis)
+                arrow_length = 0.10 # 10 cm
+                p2 = Point()
+                p2.x = float(centroid[0] + major_axis[0] * arrow_length)
+                p2.y = float(centroid[1] + major_axis[1] * arrow_length)
+                p2.z = float(centroid[2]) # Keep it perfectly flat relative to the table
+
+                marker.points = [p1, p2]
+
+                # For ARROW markers using 'points':
+                # scale.x is shaft diameter, scale.y is head diameter, scale.z is head length
+                marker.scale.x = 0.005 
+                marker.scale.y = 0.015 
+                marker.scale.z = 0.02 
+
+                # Make it bright red and fully opaque
+                marker.color.r = 1.0 
+                marker.color.g = 0.0
+                marker.color.b = 0.0
+                marker.color.a = 1.0 
+
+                self.axis_marker_pub.publish(marker)
+                # ==========================================
+                
+                # Combine (apply yaw to the base rotation)
+                final_rot = base_rot * yaw
+                q = final_rot.as_quat()
+
             else: # Side approach
                 # Position: Approach from front (X)
                 grasp_msg.pose.position.x = centroid[0] - 0.03
