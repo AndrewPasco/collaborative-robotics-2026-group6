@@ -378,26 +378,30 @@ class ManipulationExecutor(Node):
 
         # ── MOVE_TO_SLEEP (task 1 only) ────────────────────────────────
         if self.state == "MOVE_TO_SLEEP":
-            if not self.arm_cmd_sent:
-                # Publish SLEEP_POSE directly to /{arm}_arm/joint_cmd
-                msg = Float64MultiArray()
-                msg.data = list(SLEEP_POSE)
-                self.arm_pubs[arm].publish(msg)
-                self.current_arm_target = list(SLEEP_POSE)
-                self.arm_cmd_sent = True
-                self.get_logger().info(
-                    f"  Sending {arm} arm to sleep pose: {SLEEP_POSE}"
-                )
-            if self._arm_at_target(arm, self.current_arm_target):
-                self.get_logger().info("  Arm arrived at sleep pose.")
-                self._advance("OPEN_GRIPPER")
+            # if not self.arm_cmd_sent:
+            #     # Publish SLEEP_POSE directly to /{arm}_arm/joint_cmd
+            #     # msg = Float64MultiArray()
+            #     # msg.data = list(SLEEP_POSE)
+            #     # self.arm_pubs[arm].publish(msg)
+            #     # self.current_arm_target = list(SLEEP_POSE)
+            #     # self.arm_cmd_sent = True
+            #     # self.get_logger().info(
+            #     #     f"  Sending {arm} arm to sleep pose: {SLEEP_POSE}"
+            #     # )
+            #     msg = Float64MultiArray()
+            #     msg.data = SLEEP_POSE
+            #     self._send_arm_to_pose(msg, z_offset=0.0)
+            #     self.arm_cmd_sent = True
+            # if self._arm_at_target(arm, self.current_arm_target):
+            #     self.get_logger().info("  Arm arrived at sleep pose.")
+            self._advance("OPEN_GRIPPER")
 
         # ── OPEN_GRIPPER ──────────────────────────────────────────────
         if self.state == "OPEN_GRIPPER":
-            self.gripper_values[arm] = GRIPPER_OPEN
-            if self._gripper_is_open(arm) or elapsed > 3.0:
-                self.get_logger().info("  Gripper confirmed open.")
-                self._advance("MOVE_PREGRASP")
+            # self.gripper_values[arm] = GRIPPER_OPEN
+            # if self._gripper_is_open(arm) or elapsed > 3.0:
+            #     self.get_logger().info("  Gripper confirmed open.")
+            self._advance("MOVE_PREGRASP")
 
         # ── MOVE_PREGRASP ─────────────────────────────────────────────
         elif self.state == "MOVE_PREGRASP":
@@ -477,19 +481,20 @@ class ManipulationExecutor(Node):
             if not self.arm_cmd_sent:
                 if self.current_task == 0:
                     # Task 1: lift to sleep pose (direct joint command)
-                    msg = Float64MultiArray()
-                    msg.data = list(SLEEP_POSE)
-                    self.arm_pubs[arm].publish(msg)
-                    self.current_arm_target = list(SLEEP_POSE)
-                    self.get_logger().info(
-                        f"  Task 1: sending {arm} arm to sleep pose for lift."
-                    )
+                    # msg = Float64MultiArray()
+                    # msg.data = list(SLEEP_POSE)
+                    # self.arm_pubs[arm].publish(msg)
+                    # self.current_arm_target = list(SLEEP_POSE)
+                    # self.get_logger().info(
+                    #     f"  Task 1: sending {arm} arm to sleep pose for lift."
+                    # )
+                    self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
                 else:
                     # Task 3: lift to grasp + 15cm (IK via planner)
                     if self.arm_name == "right":
                         # twist
                         # self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
-                        self.arm_cmd_sent = True
+                        pass
                 self.arm_cmd_sent = True
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Arm arrived at lift pose.")
@@ -617,7 +622,7 @@ class ManipulationExecutor(Node):
         request.use_orientation = True
         request.execute = True  # Planner solves IK and publishes ArmCommand
         request.duration = 5.0
-        request.max_condition_number = 100.0
+        request.max_condition_number = 1000.0
 
         self.get_logger().info(
             f"  Calling planner for {state_label}: "
