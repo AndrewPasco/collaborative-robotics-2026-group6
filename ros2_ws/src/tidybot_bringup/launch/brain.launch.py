@@ -94,8 +94,8 @@ def generate_launch_description():
 
     manipulation = Node(
         package='tidybot_bringup',
-        # executable='manipulation_node.py',
-        executable = 'manipulation_node_placeholder.py',
+        executable='manipulation_node.py',
+        # executable = 'manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
     )
@@ -144,7 +144,7 @@ def generate_launch_description():
         sim_launch,
         # Brain layer
         # microphone,
-        speech,
+        # speech,
         navigation,
         vision,
         manipulation,
