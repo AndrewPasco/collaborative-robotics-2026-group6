@@ -2,12 +2,12 @@
 """
 Speech Node
 
-Implementation: Threaded Service Client Pattern
-- Main thread: rclpy.spin() - Handles subscriptions/timers
-- Worker thread: _do_listen() - Handles blocking service calls
 
-This prevents deadlocks because the service client can wait for Future.result()
-which is fulfilled by the main thread loop.
+uv run python src/tidybot_bringup/scripts/speech_node.py
+
+ros2 topic pub --once /brain/speech_goal std_msgs/msg/String "{data: 'test_audio ~/collaborative-robotics-2026-group6/examples/banana.wav'}"
+
+
 """
 
 import os
@@ -57,10 +57,10 @@ class SpeechNode(Node):
             self.mode = 'sequential'
         elif goal.startswith('test_audio '):
             self.mode = 'single'
-            test_file = goal.split(' ', 1)[1]
+            test_file = os.path.expanduser(goal.split(' ', 1)[1])
         elif goal.startswith('test_audio_sequential '):
             self.mode = 'sequential'
-            test_file = goal.split(' ', 1)[1]
+            test_file = os.path.expanduser(goal.split(' ', 1)[1])
         else:
             return
 
@@ -85,6 +85,8 @@ class SpeechNode(Node):
             test_file = getattr(self, 'current_test_file', None)
 
             if test_file:
+                # normalize user paths like ~/... before checking
+                test_file = os.path.expanduser(test_file)
                 self.get_logger().info(f'Using test audio file: {test_file}')
                 if not os.path.exists(test_file):
                     self._fail(f'Make sure test file exists: {test_file}')

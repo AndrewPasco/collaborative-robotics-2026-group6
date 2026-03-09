@@ -23,7 +23,12 @@ from dotenv import load_dotenv, find_dotenv
 # Load environment variables from .env if present (searches parent directories)
 load_dotenv(find_dotenv())
 
-
+MODEL_CHAIN = [
+    'models/gemini-3.1-flash-lite-preview',
+    'models/gemini-3-flash-preview',
+    'models/gemini-2.5-flash-lite',
+    'models/gemini-flash-lite-latest',
+]
 
 def import_ros2():
     """Import ROS2 modules only when needed."""
@@ -53,7 +58,7 @@ class ItemExtractorBase:
         genai.configure(api_key=api_key)
         
         # Default model for initialization (will be overridden in extraction if it fails)
-        model_name = os.environ.get('GEMINI_MODEL', 'models/gemini-2.0-flash-lite')
+        model_name = os.environ.get('GEMINI_MODEL', 'models/gemini-3.1-flash-lite-preview')
         self.gemini_model = genai.GenerativeModel(model_name)
         
         # Setup Google Cloud Credentials if not provided via env
@@ -191,15 +196,10 @@ Result:"""
 
             self.log('Extracting item via Gemini-Text...')
             
-            # Use chain: 2.0-flash-lite -> 2.0-flash -> 3-flash-preview
-            model_chain = [
-                'models/gemini-2.0-flash-lite',
-                'models/gemini-2.0-flash',
-                'models/gemini-3-flash-preview'
-            ]
+
             
             response = None
-            for model_name in model_chain:
+            for model_name in MODEL_CHAIN:
                 self.log(f'Trying Gemini model: {model_name}')
                 self.gemini_model = genai.GenerativeModel(model_name)
                 
@@ -269,15 +269,9 @@ Result:"""
 
             self.log('Extracting sequential items via Gemini-Text...')
             
-            # Use same model chain logic as single extraction
-            model_chain = [
-                'models/gemini-3-flash-preview',
-                'models/gemini-2.0-flash-lite',
-                'models/gemini-2.0-flash'
-            ]
             
             response = None
-            for model_name in model_chain:
+            for model_name in MODEL_CHAIN:
                 self.gemini_model = genai.GenerativeModel(model_name)
                 for attempt in range(3):
                     try:
