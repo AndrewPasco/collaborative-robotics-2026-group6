@@ -308,7 +308,7 @@ class VisionYoloGemini(Node):
         self._publish_detection()
 
         # 4. Detect AprilTags
-        self._detect_apriltag(frame)
+        # self._detect_apriltag(frame)
 
         # 5. Publish all detections as JSON
         self._publish_detections_json()
