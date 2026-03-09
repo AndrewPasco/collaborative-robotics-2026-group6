@@ -55,7 +55,7 @@ from sensor_msgs.msg import RegionOfInterest
 YOLO_MODEL = "yolo26x.pt"
 
 # Gemini model
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 # Minimum confidence for YOLO detections
 YOLO_CONFIDENCE = 0.5

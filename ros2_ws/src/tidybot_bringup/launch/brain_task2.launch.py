@@ -24,7 +24,7 @@ ros2 launch tidybot_bringup brain_task2.launch.py use_sim:=false
 Start task:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
-ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio_sequential /home/mete/collaborative-robotics-2026-group6/examples/banana_bowl.wav'}"
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio_sequential ~/collaborative-robotics-2026-group6/examples/banana_bowl.wav'}"
 """
 
 import os
