@@ -63,11 +63,13 @@ from rclpy.executors import MultiThreadedExecutor
 import numpy as np
 import copy
 from collections import deque
+import time
 
 from geometry_msgs.msg import PoseStamped, Pose
 from sensor_msgs.msg import JointState
 from std_msgs.msg import String, Float64MultiArray, Int32
 from tidybot_msgs.srv import PlanToTarget
+from interbotix_xs_msgs.msg import JointGroupCommand
 
 
 # =============================================================================
@@ -239,6 +241,11 @@ class ManipulationExecutor(Node):
             self.gripper_pubs[arm] = self.create_publisher(
                 Float64MultiArray, f"/{arm}_gripper/cmd", 10,
             )
+
+        self.arm_cmd_pubs = {
+            'right': self.create_publisher(JointGroupCommand, '/right_arm/commands/joint_group', 10),
+            'left': self.create_publisher(JointGroupCommand, '/left_arm/commands/joint_group', 10),
+        }
 
         self.status_pub = self.create_publisher(
             String, "/manipulation/task_status", 10,
@@ -476,11 +483,69 @@ class ManipulationExecutor(Node):
                 self._advance("MOVE_LIFT")
 
         # ── MOVE_LIFT ─────────────────────────────────────────────────
+        # elif self.state == "MOVE_LIFT":
+        #     self.gripper_values[arm] = GRIPPER_CLOSE
+        #     if not self.arm_cmd_sent:
+        #         if self.current_task == 0:
+                    
+        #             # 1. Setup Phase: Execute only once when entering this state
+        #             if not hasattr(self, 'lift_motion_started') or not self.lift_motion_started:
+        #                 expected_joint_names = ARM_JOINT_NAMES[arm]
+                        
+        #                 try:
+        #                     current_positions = [self.joint_positions_by_name[name] for name in expected_joint_names]
+        #                 except KeyError as e:
+        #                     # Throttle warnings using rclpy's logger
+        #                     self.get_logger().warn(
+        #                         f"Waiting for joint state for: {e}", 
+        #                         throttle_duration_sec=1.0
+        #                     )
+        #                     return # Exit the timer callback, try again next tick
+                        
+        #                 self.start_joints = np.array(current_positions)
+        #                 self.target_joints = np.array(SLEEP_POSE)
+                        
+        #                 if len(self.start_joints) != len(self.target_joints):
+        #                     self.get_logger().error(f"Dimension mismatch! Start: {len(self.start_joints)}, Target: {len(self.target_joints)}")
+        #                     return
+                            
+        #                 # Store trajectory parameters
+        #                 self.motion_duration = 5.0
+        #                 self.start_time = self.get_clock().now()
+        #                 self.lift_motion_started = True
+                    
+        #             # 2. Execution Phase: Calculates position based on current time
+        #             now = self.get_clock().now()
+        #             # Calculate elapsed time in seconds
+        #             elapsed = (now - self.start_time).nanoseconds / 1e9 
+                    
+        #             msg = Float64MultiArray() # Replace with your actual msg type
+                    
+        #             # 3. Check if trajectory is complete
+        #             if elapsed >= self.motion_duration:
+        #                 # Snap to exact target and mark complete
+        #                 msg.data = self.target_joints.tolist()
+        #                 self.arm_pubs[arm].publish(msg)
+                        
+        #                 self.arm_cmd_sent = True
+        #                 self.lift_motion_started = False # Reset for future tasks
+        #             else:
+        #                 # Calculate normalized time 's' and interpolate
+        #                 s = elapsed / self.motion_duration
+        #                 s_cubic = 3 * (s**2) - 2 * (s**3)
+        #                 current_cmd = self.start_joints + (self.target_joints - self.start_joints) * s_cubic
+                        
+        #                 msg.data = current_cmd.tolist()
+        #                 self.arm_pubs[arm].publish(msg)
+
         elif self.state == "MOVE_LIFT":
             self.gripper_values[arm] = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
                 if self.current_task == 0:
-                    # Task 1: lift to sleep pose (direct joint command)
+                    self.get_logger().info(f"  Lifting to sleep pose with planner: {SLEEP_POSE}")
+                    self.go_to_sleep_pose(arm, max_joint_speed=0.3)
+                    self.arm_cmd_sent = True
+                    # # Task 1: lift to sleep pose (direct joint command)
                     # msg = Float64MultiArray()
                     # msg.data = list(SLEEP_POSE)
                     # self.arm_pubs[arm].publish(msg)
@@ -488,7 +553,7 @@ class ManipulationExecutor(Node):
                     # self.get_logger().info(
                     #     f"  Task 1: sending {arm} arm to sleep pose for lift."
                     # )
-                    self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
+                    # # self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
                 else:
                     # Task 3: lift to grasp + 15cm (IK via planner)
                     if self.arm_name == "right":
@@ -516,6 +581,47 @@ class ManipulationExecutor(Node):
                 )
                 self.arm_cmd_sent = True
 
+    def go_to_sleep_pose(self, arm_name: str, max_joint_speed: float = 0.5):
+        """Send arm to sleep pose using smooth interpolated trajectory.
+
+        Args:
+            arm_name: 'right' or 'left'
+            max_joint_speed: Maximum joint velocity in rad/s (default 0.5 rad/s ~ 30 deg/s)
+        """
+        # Spin to get latest joint states
+        rclpy.spin_once(self, timeout_sec=0.1)
+
+        # Get current and target positions
+        current = [self.joint_positions_by_name[name] for name in ARM_JOINT_NAMES[arm_name]]
+        target = np.array(SLEEP_POSE)
+
+        # Calculate required duration based on max joint difference
+        max_diff = np.max(np.abs(target - current))
+        duration = max(max_diff / max_joint_speed, 2.0)  # At least 2 seconds
+
+        self.get_logger().info(f'Moving {arm_name} arm to sleep pose over {duration:.1f}s (max joint diff: {max_diff:.2f} rad)')
+
+        # Interpolate trajectory with smooth cosine profile
+        rate_hz = 50.0
+        dt = 1.0 / rate_hz
+        num_steps = max(int(duration * rate_hz), 1)
+
+        for i in range(num_steps + 1):
+            t = i / num_steps
+            # Cosine interpolation for smooth acceleration/deceleration
+            alpha = 0.5 * (1 - np.cos(np.pi * t))
+
+            # Interpolate
+            q = current + alpha * (target - current)
+
+            cmd = JointGroupCommand()
+            cmd.name = f'{arm_name}_arm'
+            cmd.cmd = q.tolist()
+            self.arm_cmd_pubs[arm_name].publish(cmd)
+
+            if i < num_steps:
+                time.sleep(dt)
+    
     # =====================================================================
     #  STATE HELPERS
     # =====================================================================

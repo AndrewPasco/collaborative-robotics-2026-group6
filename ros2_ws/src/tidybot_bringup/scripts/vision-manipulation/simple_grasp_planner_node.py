@@ -58,8 +58,8 @@ class SimpleGraspPlannerNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("table_height_buffer", 0.01)  # 1cm above table is object
         self.declare_parameter("grasp_type", "top")          # "top" or "side"
-        self.declare_parameter("depth_adjust", 0.0)        # how much to set gripper position back
-        self.declare_parameter("height_adjust", 0.0)       # how much to raise gripper pose above object
+        self.declare_parameter("depth_adjust", 0.06)        # how much to set gripper position back
+        self.declare_parameter("height_adjust", 0.06)       # how much to raise gripper pose above object
         self.declare_parameter("send_plan_request", False)   # Option to call planner directly
         
         self.base_frame = self.get_parameter("base_frame").value
@@ -158,29 +158,29 @@ class SimpleGraspPlannerNode(Node):
                 self.get_logger().warn("Too few points in cloud.")
                 return
             
-            # # ==========================================
-            # # DEBUG: Generate and save Z-value heatmap
-            # # ==========================================
-            # # Extract X, Y, and Z columns
-            # x = points[:, 0]
-            # y = points[:, 1]
-            # z_heights = points[:, 2]
+            # ==========================================
+            # DEBUG: Generate and save Z-value heatmap
+            # ==========================================
+            # Extract X, Y, and Z columns
+            x = points[:, 0]
+            y = points[:, 1]
+            z_heights = points[:, 2]
 
-            # plt.figure(figsize=(8, 6))
-            # # Scatter plot acting as a top-down heatmap. 'c' maps the colors to Z values.
-            # scatter = plt.scatter(x, y, c=z_heights, cmap='viridis', s=5, alpha=0.8)
-            # plt.colorbar(scatter, label='Z Height (meters)')
-            # plt.xlabel(f'X in {self.base_frame} (m)')
-            # plt.ylabel(f'Y in {self.base_frame} (m)')
-            # plt.title('Top-Down Heatmap of Z-Values')
-            # plt.axis('equal') # Ensures spatial proportions aren't distorted
+            plt.figure(figsize=(8, 6))
+            # Scatter plot acting as a top-down heatmap. 'c' maps the colors to Z values.
+            scatter = plt.scatter(x, y, c=z_heights, cmap='viridis', s=5, alpha=0.8)
+            plt.colorbar(scatter, label='Z Height (meters)')
+            plt.xlabel(f'X in {self.base_frame} (m)')
+            plt.ylabel(f'Y in {self.base_frame} (m)')
+            plt.title('Top-Down Heatmap of Z-Values')
+            plt.axis('equal') # Ensures spatial proportions aren't distorted
             
-            # # Save the plot to the /tmp directory
-            # heatmap_path = '/tmp/grasp_z_heatmap.png'
-            # plt.savefig(heatmap_path)
-            # plt.close() # Free up memory
-            # self.get_logger().info(f"Saved Z-heatmap to {heatmap_path}")
-            # # ==========================================
+            # Save the plot to the /tmp directory
+            heatmap_path = '/tmp/grasp_z_heatmap.png'
+            plt.savefig(heatmap_path)
+            plt.close() # Free up memory
+            self.get_logger().info(f"Saved Z-heatmap to {heatmap_path}")
+            # ==========================================
 
             # 2. Foreground Segmentation (Z-Filter relative to table)
             z_heights = points[:, 2]
