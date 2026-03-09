@@ -34,8 +34,9 @@ import json
 import base64
 import time
 from io import BytesIO
-# from dotenv import load_dotenv
-# load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
+
 
 
 
@@ -47,9 +48,9 @@ from cv_bridge import CvBridge
 from std_msgs.msg import Int32MultiArray
 from sensor_msgs.msg import RegionOfInterest
 
-# ══════════════════════════════════════════════════════════════
-#  CONFIGURATION
-# ══════════════════════════════════════════════════════════════
+
+# ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
+
 
 # YOLO model 
 YOLO_MODEL = "yolo26x.pt"
@@ -274,7 +275,7 @@ class VisionYoloGemini(Node):
         if not hasattr(self, '_frame_count'): self._frame_count = 0
         if not hasattr(self, '_last_log_time'): self._last_log_time = 0.0
         self._frame_count += 1
-        self.get_logger().info(f'Frame {self._frame_count} received')
+        # self.get_logger().info(f'Frame {self._frame_count} received')
 
         now = self.get_clock().now().nanoseconds * 1e-9
         msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9

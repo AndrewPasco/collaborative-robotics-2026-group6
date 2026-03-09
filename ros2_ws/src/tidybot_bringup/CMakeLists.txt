@@ -37,6 +37,17 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
+  scripts/test_microphone.py
+  scripts/test_stt.py
+  scripts/audio_item_detector.py
+  scripts/brain_node.py
+  scripts/brain_node_task2.py
+  scripts/navigation_node.py
+  scripts/manipulation_node_placeholder.py
+  scripts/speech_node.py
+  scripts/Navigation/navigator.py
+  scripts/Navigation/vision_nav.py
+  scripts/Navigation/vision_yolo_gemini.py
   scripts/Manipulation/modular_manipulation_executor_node.py
   scripts/Manipulation/manipulation_executor_node.py
   scripts/Manipulation/manipulation_node.py
@@ -44,8 +55,6 @@ install(PROGRAMS
   scripts/vision-manipulation/pointnet_gpd_node.py
   scripts/vision-manipulation/contact_graspnet_node.py
   scripts/vision-manipulation/simple_grasp_planner_node.py
-  scripts/Navigation/navigator.py
-  scripts/Navigation/vision_yolo_gemini.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

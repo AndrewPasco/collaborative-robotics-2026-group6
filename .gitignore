@@ -23,6 +23,8 @@ uv.lock
 *.swp
 *.swo
 *~
+.env
+GOOGLE_CREDENTIALS.json
 
 # OS
 .DS_Store
