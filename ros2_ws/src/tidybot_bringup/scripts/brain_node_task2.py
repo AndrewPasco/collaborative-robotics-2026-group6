@@ -32,7 +32,7 @@ from enum import Enum, auto
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Int32
+from std_msgs.msg import String, Int32, Float64MultiArray
 from sensor_msgs.msg import JointState
 
 
@@ -63,6 +63,7 @@ class BrainNodeTask2(Node):
         self.manip_goal_pub  = self.create_publisher(String, '/brain/manipulation_goal', 10)
         self.arm_status_pub  = self.create_publisher(Int32,  '/arm_status',             10)
         self.task_status_pub = self.create_publisher(Int32,  '/task_status',            10)
+        self.pt_cmd_pub      = self.create_publisher(Float64MultiArray, '/camera/pan_tilt_cmd', 10)
 
         # ── Status subscribers ──────────────────────────────────────
         self.speech_result = None
@@ -114,6 +115,9 @@ class BrainNodeTask2(Node):
         task_msg.data = 0  # 0 = task 1 or 2
         self.task_status_pub.publish(task_msg)
 
+        # Set camera to look at 0 0
+        self._set_camera_pan_tilt(0.0, 0.0)
+
         self.state_start_time = time.time()
         self.control_timer = self.create_timer(1.0, self._control_loop)
 
@@ -152,6 +156,12 @@ class BrainNodeTask2(Node):
         msg.data = data
         publisher.publish(msg)
 
+    def _set_camera_pan_tilt(self, pan: float, tilt: float):
+        msg = Float64MultiArray()
+        msg.data = [float(pan), float(tilt)]
+        self.pt_cmd_pub.publish(msg)
+        self.get_logger().info(f'Setting camera pan-tilt: {pan}, {tilt}')
+
     def _parse_speech_json(self, raw: str):
         """
         Parse JSON from speech result.
@@ -189,6 +199,7 @@ class BrainNodeTask2(Node):
 
             # Simulation confirmed running and start command received
             self.get_logger().info(f'[OK] MuJoCo running. Executing command "{self.start_command}"...')
+            self._set_camera_pan_tilt(0.0, 0.0)
             self._transition(BrainState.WAITING_FOR_COMMAND)
 
         # --- A: tell speech_node to listen (sequential) -------------

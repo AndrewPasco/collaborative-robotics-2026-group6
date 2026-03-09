@@ -17,6 +17,7 @@ Launches the FULL system in one command:
 Usage:
 ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true
 Without sim:
+ros2 launch tidybot_bringup real.launch.py use_lidar:=false
 ros2 launch tidybot_bringup brain.launch.py use_sim:=false
 
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
@@ -27,7 +28,7 @@ ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio /ho
 import os
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -113,6 +114,27 @@ def generate_launch_description():
         output='screen',
     )
 
+    # ── Real-robot compatibility: arm_controller_node ────────────────
+    # When use_sim is false, we need to launch the controller node ourselves 
+    # to bridge ArmCommand messages to the real hardware joint topics.
+    right_arm_controller = Node(
+        package='tidybot_control',
+        executable='arm_controller_node',
+        name='right_arm_controller',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        parameters=[{'arm_name': 'right', 'control_rate': 50.0}]
+    )
+
+    left_arm_controller = Node(
+        package='tidybot_control',
+        executable='arm_controller_node',
+        name='left_arm_controller',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        parameters=[{'arm_name': 'left', 'control_rate': 50.0}]
+    )
+
     return LaunchDescription([
         # Arguments
         declare_use_rviz,
@@ -126,5 +148,7 @@ def generate_launch_description():
         navigation,
         vision,
         manipulation,
+        right_arm_controller,
+        left_arm_controller,
         brain,
     ])

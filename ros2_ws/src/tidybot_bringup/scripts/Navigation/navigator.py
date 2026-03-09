@@ -437,7 +437,7 @@ class Navigator(Node):
         error_x = IMAGE_CENTER_X - pixel_x
 
         # Angular: Kp * error (same as HW2 P7, different units)
-        omega = KP_ANGULAR * error_x
+        omega = max(0.15, KP_ANGULAR * error_x)
         if abs(error_x) < CENTERING_DEADZONE:
             omega = 0.0
 
@@ -453,7 +453,7 @@ class Navigator(Node):
             _now = _t.time()
             if _now - getattr(self, '_last_align_log', 0) >= 0.5:
                 self._last_align_log = _now
-                self.get_logger().info(f'APPROACH: face-first aligning (offset {error_x:.1f}px)')
+                self.get_logger().info(f'APPROACH: face-first aligning (offset {error_x:.1f}px), omega: {omega:.1f}')
         else:
             # ── Proportional Slowdown (User request) ──
             # v = KP_APPROACH_LINEAR * (target_y - current_y)
