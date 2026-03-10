@@ -2,7 +2,7 @@
 
 ## Development Rules for Gemini
 
-1.  **Always commit and push changes** - After making code changes, add, commit, and push to the repository (unless the user specifies otherwise).
+1.  **Never commit and push changes** - After making code changes do not, add, commit, and push to the repository (unless the user specifies otherwise).
 2.  **Use descriptive commit messages** - Summarize what was changed and why.
 3.  **Test before committing** - Ensure changes work before pushing.
 4.  **Update documentation** - Keep the project's `README.md` and this `GEMINI.md` file up to date with any significant changes.

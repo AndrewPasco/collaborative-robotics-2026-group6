@@ -40,7 +40,7 @@ install(PROGRAMS
   scripts/test_microphone.py
   scripts/test_stt.py
   scripts/audio_item_detector.py
-  scripts/brain_node.py
+  scripts/brain_node_task1.py
   scripts/brain_node_task2.py
   scripts/navigation_node.py
   scripts/manipulation_node_placeholder.py

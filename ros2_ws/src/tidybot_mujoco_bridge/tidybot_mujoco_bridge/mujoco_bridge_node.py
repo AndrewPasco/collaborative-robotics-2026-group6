@@ -253,8 +253,9 @@ class MuJoCoBridgeNode(Node):
         publish_period = 1.0 / self.publish_rate
         self.publish_timer = self.create_timer(publish_period, self.publish_callback)
 
-        # Camera is processed at the end of publish_timer to avoid executor starvation
-        self.last_camera_time = time.perf_counter()
+        # Camera timer — separate from publish_timer so it runs at camera_rate
+        camera_period = 1.0 / self.camera_rate
+        self.camera_timer = self.create_timer(camera_period, self.camera_callback)
 
         # Launch viewer in separate thread if requested
         self.viewer = None

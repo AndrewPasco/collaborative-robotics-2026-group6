@@ -5,11 +5,9 @@ vision_yolo_gemini.py — Enhanced Vision Node with YOLO + Gemini
 Combines fast local detection with flexible open-vocabulary queries:
   - YOLO: Fast object detection for known classes (runs every frame)
   - Gemini: Open-vocabulary detection for arbitrary queries (on demand)
-  - AprilTag: Pose estimation via solvePnP (same as vision_nav.py)
 
 Publishes:
   /object_detection  (geometry_msgs/Point)  — x=pixel_x, y=pixel_y, z=bbox_area
-  /apriltag_pose     (geometry_msgs/Pose)   — PnP pose (position.z = depth)
   /vision/detections (std_msgs/String)      — JSON list of all detected objects
 
 Subscribes:
@@ -28,25 +26,35 @@ import rclpy
 from rclpy.node import Node
 import cv2
 import numpy as np
-import math
 import os
 import json
 import base64
 import time
-from io import BytesIO
 from dotenv import load_dotenv
 load_dotenv()
 
-
-
-
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Point, Pose
+from geometry_msgs.msg import Point
 from std_msgs.msg import String
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy, qos_profile_sensor_data
 from cv_bridge import CvBridge
-from std_msgs.msg import Int32MultiArray
 from sensor_msgs.msg import RegionOfInterest
+
+# --- Navigator Constants (imported for visualization) ---
+try:
+    from navigator import (
+        IMAGE_CENTER_X, 
+        CENTERING_SLOWDOWN_ZONE, 
+        CENTERING_DEADZONE, 
+        FINE_CENTERING_DEADZONE,
+        TARGET_Y_OFFSET
+    )
+except ImportError:
+    # Fallback if navigator.py is not in path
+    IMAGE_CENTER_X = 320.0
+    CENTERING_SLOWDOWN_ZONE = 45
+    CENTERING_DEADZONE = 25
+    FINE_CENTERING_DEADZONE = 15
+    TARGET_Y_OFFSET = 50
 
 
 # ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
@@ -61,17 +69,7 @@ GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 # Minimum confidence for YOLO detections
 YOLO_CONFIDENCE = 0.5
 
-# Camera intrinsics (adjust for your camera)
-CAMERA_MATRIX = np.array([
-    [615.0,   0.0, 320.0],
-    [  0.0, 615.0, 240.0],
-    [  0.0,   0.0,   1.0]
-], dtype=np.float64)
 
-DIST_COEFFS = np.zeros((4, 1), dtype=np.float64)
-
-# AprilTag size (meters, half side length)
-TAG_HALF_SIZE = 0.075
 
 # How often to run Gemini (not every frame - too slow/expensive)
 GEMINI_QUERY_INTERVAL = 2.0  # seconds
@@ -116,8 +114,6 @@ class VisionYoloGemini(Node):
         # ── Publishers ──
         self.detection_pub = self.create_publisher(
             Point, '/object_detection', 10)
-        self.apriltag_pub = self.create_publisher(
-            Pose, '/apriltag_pose', 10)
         self.detections_json_pub = self.create_publisher(
             String, '/vision/detections', 10)
         self.annotated_pub = self.create_publisher(
@@ -127,12 +123,6 @@ class VisionYoloGemini(Node):
             "/vision/target_bbox",
             10
         )
-
-        self.class_id_map = {
-            "bottle": 0,
-            "cap": 1,
-            "banana": 2
-        }
 
         self.cv_bridge = CvBridge()
 
@@ -144,14 +134,7 @@ class VisionYoloGemini(Node):
             String, '/vision/target',
             self.target_cb, 10)
 
-        # ── ArUco detector ──
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
-        self.aruco_params = cv2.aruco.DetectorParameters()
-        self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
-        s = TAG_HALF_SIZE
-        self.tag_object_points = np.array([
-            [-s, -s, 0.0], [s, -s, 0.0], [s, s, 0.0], [-s, s, 0.0]
-        ], dtype=np.float64)
+
 
         self.get_logger().info(
             f'Vision ready. YOLO={self.yolo_available}, Gemini={self.gemini_available}')
@@ -177,7 +160,6 @@ class VisionYoloGemini(Node):
             
             self.yolo_model = YOLO(model_path).to(device)
             self.yolo_available = True
-            self.device = device
             
             # Pre-bake device / precision into the model's overrides so they
             # are NOT re-validated on every single predict() call.
@@ -281,7 +263,7 @@ class VisionYoloGemini(Node):
         msg_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         age = now - msg_time if msg_time > 0 else 0.0
 
-        if now - self._last_log_time >= 1.0:
+        if now - self._last_log_time >= 10.0:
             self._last_log_time = now
             yolo_classes = [d['class'] for d in self.latest_detections] if self.latest_detections else []
             self.get_logger().info(
@@ -300,15 +282,11 @@ class VisionYoloGemini(Node):
         if self.yolo_available:
             self._run_yolo(frame)
 
-        # Gemini: rate-limited, only when target has no YOLO class match
+        # 2. Run Gemini if YOLO did not find the target
         if (self.gemini_available and self.target_query and self.target_class is None):
-            self._run_gemini_if_needed(frame)
-
-        # 3. Publish best detection for Navigator
+            self._run_gemini_if_needed(frame)        # 3. Publish best detection for Navigator
         self._publish_detection()
 
-        # 4. Detect AprilTags
-        # self._detect_apriltag(frame)
 
         # 5. Publish all detections as JSON
         self._publish_detections_json()
@@ -318,7 +296,7 @@ class VisionYoloGemini(Node):
         if (self.annotated_pub.get_subscription_count() > 0 and
                 _now - getattr(self, '_last_annotated_time', 0.0) >= _ANNOTATED_MIN_PERIOD):
             self._last_annotated_time = _now
-        self._publish_annotated_image(frame, msg.header)
+            self._publish_annotated_image(frame, msg.header)
 
     # ═══════════════════════════════════════════════════════════
     #  YOLO DETECTION
@@ -326,11 +304,10 @@ class VisionYoloGemini(Node):
 
     def _run_yolo(self, frame: np.ndarray):
         """Run YOLO object detection."""
-        # Diagnostic: Log resolution once
-        if not hasattr(self, '_logged_res'):
+        # Diagnostic: Log resolution once on the first frame
+        if self._frame_count == 1:
             h, w = frame.shape[:2]
             self.get_logger().info(f'Input frame resolution: {w}x{h}')
-            self._logged_res = True
         
         results = self.yolo_model.predict(frame)
 
@@ -450,9 +427,6 @@ Image dimensions are 640x480. Give pixel coordinates."""
             if best is None and self.gemini_result:
                 best = self.gemini_result
 
-        # NOTE: do NOT publish when target_query is None.
-        # Publishing a fallback "largest object" with no target set would
-        # send the navigator chasing random objects immediately on startup.
 
         # Publish only when a target has been requested and matched
         if best:
@@ -520,14 +494,51 @@ Image dimensions are 640x480. Give pixel coordinates."""
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, thickness)
             cv2.putText(annotated_frame, label, (x1, max(y1-5, 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness)
-                        
+            
+            # Draw center dot for this detection
+            cx, cy = int(det.get('cx', 0)), int(det.get('cy', 0))
+            cv2.circle(annotated_frame, (cx, cy), 4, (255, 255, 255), -1)
+
         # Draw Gemini detection if any
         if self.gemini_result:
             x1, y1, x2, y2 = [int(v) for v in self.gemini_result['bbox']]
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
             cv2.putText(annotated_frame, f"Gemini: {self.target_query}", (x1, max(y1-5, 10)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            
+            # Draw center dot for Gemini detection
+            cx, cy = int(self.gemini_result.get('cx', 0)), int(self.gemini_result.get('cy', 0))
+            cv2.circle(annotated_frame, (cx, cy), 4, (255, 255, 255), -1)
+
+        # --- Draw Navigation Markers ---
+        h, w = annotated_frame.shape[:2]
         
+        # 1. Centering Zones (Vertical lines)
+        # Slowdown Zone (Yellow)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X - CENTERING_SLOWDOWN_ZONE), 0), 
+                 (int(IMAGE_CENTER_X - CENTERING_SLOWDOWN_ZONE), h), (0, 255, 255), 2)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X + CENTERING_SLOWDOWN_ZONE), 0), 
+                 (int(IMAGE_CENTER_X + CENTERING_SLOWDOWN_ZONE), h), (0, 255, 255), 2)
+        
+        # Deadzone (Red)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X - CENTERING_DEADZONE), 0), 
+                 (int(IMAGE_CENTER_X - CENTERING_DEADZONE), h), (0, 0, 255), 2)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X + CENTERING_DEADZONE), 0), 
+                 (int(IMAGE_CENTER_X + CENTERING_DEADZONE), h), (0, 0, 255), 2)
+
+        # Fine Centering Deadzone (Orange)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X - FINE_CENTERING_DEADZONE), 0), 
+                 (int(IMAGE_CENTER_X - FINE_CENTERING_DEADZONE), h), (0, 165, 255), 2)
+        cv2.line(annotated_frame, (int(IMAGE_CENTER_X + FINE_CENTERING_DEADZONE), 0), 
+                 (int(IMAGE_CENTER_X + FINE_CENTERING_DEADZONE), h), (0, 165, 255), 2)
+
+        # 2. Target Y Offset (Horizontal line - Blue)
+        # The robot stops when pixel_y > IMAGE_HEIGHT - TARGET_Y_OFFSET
+        y_line = int(h - TARGET_Y_OFFSET)
+        cv2.line(annotated_frame, (0, y_line), (w, y_line), (255, 0, 0), 2)
+        cv2.putText(annotated_frame, "Stop Line", (10, y_line - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+
         # Publish
         try:
             annotated_msg = self.cv_bridge.cv2_to_imgmsg(annotated_frame, encoding="bgr8")
@@ -535,40 +546,6 @@ Image dimensions are 640x480. Give pixel coordinates."""
             self.annotated_pub.publish(annotated_msg)
         except Exception as e:
             self.get_logger().error(f"Failed to publish annotated image: {e}", once=True)
-
-    # ═══════════════════════════════════════════════════════════
-    #  APRILTAG DETECTION (same as vision_nav.py)
-    # ═══════════════════════════════════════════════════════════
-
-    def _detect_apriltag(self, frame: np.ndarray):
-        """Detect AprilTag and compute pose via solvePnP."""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = self.aruco_detector.detectMarkers(gray)
-
-        if ids is None or len(ids) == 0:
-            return
-
-        image_points = corners[0].reshape(4, 2).astype(np.float64)
-        success, rvec, tvec = cv2.solvePnP(
-            self.tag_object_points, image_points,
-            CAMERA_MATRIX, DIST_COEFFS,
-            flags=cv2.SOLVEPNP_IPPE_SQUARE)
-
-        if not success:
-            return
-
-        R, _ = cv2.Rodrigues(rvec)
-        qw, qx, qy, qz = self._rotation_matrix_to_quaternion(R)
-
-        pose = Pose()
-        pose.position.x = float(tvec[0][0])
-        pose.position.y = float(tvec[1][0])
-        pose.position.z = float(tvec[2][0])
-        pose.orientation.x = qx
-        pose.orientation.y = qy
-        pose.orientation.z = qz
-        pose.orientation.w = qw
-        self.apriltag_pub.publish(pose)
 
     # ═══════════════════════════════════════════════════════════
     #  HELPERS
@@ -594,35 +571,7 @@ Image dimensions are 640x480. Give pixel coordinates."""
             self.get_logger().error(f'Image conversion failed: {e}', once=True)
             return None
 
-    @staticmethod
-    def _rotation_matrix_to_quaternion(R: np.ndarray):
-        """Convert rotation matrix to quaternion."""
-        trace = R[0, 0] + R[1, 1] + R[2, 2]
-        if trace > 0:
-            s = 0.5 / math.sqrt(trace + 1.0)
-            w = 0.25 / s
-            x = (R[2, 1] - R[1, 2]) * s
-            y = (R[0, 2] - R[2, 0]) * s
-            z = (R[1, 0] - R[0, 1]) * s
-        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-            s = 2.0 * math.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
-            w = (R[2, 1] - R[1, 2]) / s
-            x = 0.25 * s
-            y = (R[0, 1] + R[1, 0]) / s
-            z = (R[0, 2] + R[2, 0]) / s
-        elif R[1, 1] > R[2, 2]:
-            s = 2.0 * math.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
-            w = (R[0, 2] - R[2, 0]) / s
-            x = (R[0, 1] + R[1, 0]) / s
-            y = 0.25 * s
-            z = (R[1, 2] + R[2, 1]) / s
-        else:
-            s = 2.0 * math.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
-            w = (R[1, 0] - R[0, 1]) / s
-            x = (R[0, 2] + R[2, 0]) / s
-            y = (R[1, 2] + R[2, 1]) / s
-            z = 0.25 * s
-        return w, x, y, z
+
 
 
 def main(args=None):

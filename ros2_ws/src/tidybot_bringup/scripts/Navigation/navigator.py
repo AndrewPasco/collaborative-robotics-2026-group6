@@ -1,25 +1,7 @@
 #!/usr/bin/env python3
 """
-navigator.py — ME 326 Navigator Node (Revised)
-================================================
-Built on top of HW2:
-  - P7 structure: Node class, /cmd_vel publisher, /odom subscriber, Kp control
-  - P6 pattern:   AprilTag PnP pose for return-to-start and distance checks
-  - P3-P4 output: pixel coordinates from Vision API pipeline
+navigator.py — ME 326 Navigator Node 
 
-Handles steps B, D, E, I from the task plan:
-  B  Scan scene (spin in place, stop early if target found)
-  D  Plan path (visual servo — proportional control from HW2 P7)
-  E  Navigate until "sufficiently close" (bbox + AprilTag PnP depth)
-  I  Return to start (AprilTag homing, odometry fallback)
-
-Setup:
-  1. cp navigator.py ros2_ws/src/tidybot_bringup/scripts/
-  2. chmod +x ros2_ws/src/tidybot_bringup/scripts/navigator.py
-  3. Add to CMakeLists.txt under install(PROGRAMS ...)
-  4. cd ros2_ws && colcon build --packages-select tidybot_bringup
-  5. source setup_env.bash
-  6. ros2 run tidybot_bringup navigator.py
   
 # 1. Start the simulation
 ros2 launch tidybot_bringup sim.launch.py scene:=scene_task2.xml use_rviz:=true show_mujoco_viewer:=true
@@ -46,56 +28,46 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
 
 
-# --- Camera ---
-IMAGE_WIDTH   = 640
-IMAGE_HEIGHT  = 480
+# --- Camera Parameters ---
+IMAGE_WIDTH    = 640
+IMAGE_HEIGHT   = 480
 IMAGE_CENTER_X = IMAGE_WIDTH / 2.0
 
-# --- Visual Servo Gains (step D) ---
-# Same concept as HW2 P7 Kp, but in pixel-space:
-#   HW2: angular_vel = Kp * (theta_ref - theta_current)       [rad error]
-#   Here: angular_vel = KP_ANGULAR * (center_px - object_px)  [pixel error]
-KP_ANGULAR = 0.000625          # rad/s per pixel of centering error IMAGE_WIDTH/2 * 0.000625 = 0.2 rad/s at edge of frame
-APPROACH_LINEAR_VEL = 0.5   # m/s max forward speed
-CENTERING_DEADZONE = 5       # pixels - Stop turning if we're within this many pixels of center (prevents jitter)
-CENTERING_SLOWDOWN_ZONE = 40 # pixels - Doesnt move until within this many pixels of center (face-first alignment
-KP_APPROACH_LINEAR = 0.02    # m/s per pixel of vertical error (sharper deceleration)
+# --- Velocity Limits ---
+MAX_LINEAR_VEL          = 0.25 # m/s
+MAX_ANGULAR_VEL         = 1.0  # rad/s
 MIN_APPROACH_LINEAR_VEL = 0.04 # m/s floor to prevent stalling
 
-# --- AprilTag Return-to-Start Gains (step I) ---
-# Same Kp structure as HW2 P7, but error is in meters from PnP:
-#   angular_vel = -KP_LATERAL * tx   (center on tag laterally)
-#   linear_vel  =  KP_FORWARD * tz   (drive toward tag)
-KP_LATERAL = 2.0             # rad/s per meter of lateral offset
-KP_FORWARD = 0.8             # m/s per meter of depth
-
-# --- "Sufficiently Close" Thresholds (step E) ---
-CLOSE_BBOX_AREA_RATIO = 0.15   # bbox_area / image_area (coarse check)
-CLOSE_DEPTH_PNP = 0.45         # meters via AprilTag PnP (precise check)
-HOME_ARRIVAL_DEPTH = 0.30      # meters — "back at start" via AprilTag
-
-# --- Scanning (step B) ---
-SCAN_ANGULAR_VEL = 0.2       # rad/s while spinning
+# --- Navigation Tuning ---
+KP_ANGULAR         = 0.001 # rad/s per pixel of x-error (e.g. 0.32 rad/s at edge of frame)
+KP_APPROACH_LINEAR = 0.02  # m/s per pixel of y-error (sharper deceleration)
+    
+# --- Scanning ---
+SCAN_ANGULAR_VEL   = 0.2  # rad/s while spinning
 SCAN_FULL_ROTATION = 2 * math.pi / SCAN_ANGULAR_VEL  # seconds for 360°
 
-# --- Safety Limits ---
-MAX_LINEAR_VEL  = 0.25
-MAX_ANGULAR_VEL = 1.0
+# --- Coarse Centering & Approach ---
+APPROACH_LINEAR_VEL     = 0.2  # m/s max forward speed
+CENTERING_SLOWDOWN_ZONE = 45   # pixels - Wait to align if error_x > this threshold
+CENTERING_DEADZONE      = 25   # pixels - Stop turning if |error_x| < this (prevents jitter)
+CENTERING_MIN_OMEGA     = 0.15 # rad/s - Physical limit for turning in place
+CENTERING_HOLD_TIME     = 2.0  # seconds - Stable centering before advancing
+TARGET_Y_OFFSET         = 50   # pixels - Distance from bottom of frame to stop
 
-# --- Odometry Return Gains (fallback if no AprilTag) ---
-# Same as HW2 P7: v = Kp * distance_error, omega = Kp * angle_error
-KP_ODOM_LINEAR  = 0.8
-KP_ODOM_ANGULAR = 1.5
+# Overshoot recovery — if object is lost during approach, briefly counter-rotate
+# before giving up and re-scanning (prevents false full-scan on a minor overshoot)
+OVERSHOOT_RECOVER_VEL   = -0.15 # rad/s (counter-rotate) - Physical limit
+OVERSHOOT_RECOVER_DUR   = 1.5   # seconds
 
-# --- Fine-centering (after coarse approach) ---
-FINE_CENTERING_DEADZONE = 5   # pixels — tighter than coarse CENTERING_DEADZONE (5px)
-FINE_CENTERING_HOLD     = 0.5 # seconds centred before advancing
+# --- Fine Centering ---
+FINE_CENTERING_DEADZONE = 15  # pixels - Tighter deadzone for final alignment
+FINE_CENTERING_HOLD     = 2.0 # seconds - Must stay within deadzone before advancing
 
-# --- Final approach (odom-based, no YOLO) ---
-FINAL_APPROACH_DIST = 0.6   # metres to drive after camera reset
-FINAL_APPROACH_VEL  = 0.1   # m/s (slow — we are very close)
+# --- Final Approach ---
+FINAL_APPROACH_DIST = 0.5 # metres to drive blind after camera reset
+FINAL_APPROACH_VEL  = 0.1 # m/s (slow final approach)
 
-# --- States ---
+# --- State Machine States ---
 STATE_IDLE           = "IDLE"
 STATE_SCANNING       = "SCANNING"
 STATE_APPROACHING    = "APPROACHING"
@@ -104,21 +76,21 @@ STATE_CAMERA_RESET   = "CAMERA_RESET"
 STATE_FINAL_APPROACH = "FINAL_APPROACH"
 STATE_ARRIVED        = "ARRIVED"
 STATE_RETURNING      = "RETURNING"
+STATE_PAUSING        = "PAUSING"
 
 
 class Navigator(Node):
     """
     Navigator node — drives the TidyBot2 base.
 
-    Structure mirrors HW2 P7 TrajectoryTracker:
+    Structure:
       - Publisher:  /cmd_vel (Twist)
       - Subscriber: /odom (Odometry)
       - Timer:      control loop at 10 Hz
       - Controller: proportional (Kp * error)
 
-    New additions beyond P7:
-      - /object_detection subscriber (from Vision node, HW2 P3-P4 output)
-      - /apriltag_pose subscriber (from Vision node, HW2 P6 solvePnP)
+    Key additions:
+      - /object_detection subscriber (from Vision node)
       - State machine (IDLE → SCAN → APPROACH → ARRIVED → RETURN)
     """
 
@@ -130,17 +102,12 @@ class Navigator(Node):
         self.state = STATE_IDLE
         self.scan_start_time = None
 
-        # ── Object detection (from Vision node — HW2 P3/P4 output) ──
+        # ── Object detection (from Vision node) ──
         self.latest_detection = None       # Point(x=px, y=py, z=area)
         self.detection_stamp = 0.0
         self.detection_timeout = 5.0       # seconds — longer to survive manual testing gaps
 
-        # ── AprilTag pose (from Vision node — HW2 P6 solvePnP output) ──
-        self.apriltag_pose = None          # Pose with position = tvec
-        self.apriltag_stamp = 0.0
-        self.apriltag_timeout = 1.0
-
-        # ── Odometry (same as HW2 P7) ──
+        # ── Odometry ──
         self.odom_x = 0.0
         self.odom_y = 0.0
         self.odom_theta = 0.0
@@ -150,6 +117,19 @@ class Navigator(Node):
 
         # ── Fine-centering state ──
         self._fine_center_start = None  # time when we first became centred
+        self._align_center_start_time = None # time when we first became aligned in Phase 0
+
+        # ── Pause state ──
+        self._pause_end_time    = 0.0
+        self._pause_next_state  = STATE_IDLE
+        self._pause_last_countdown = 0
+
+        # ── Approach phase (0=aligning, 1=advancing) ──
+        self._approach_phase = 0
+        # Last commanded turn direction (+1=CCW/left, -1=CW/right)
+        # Used to counter-rotate briefly if the object is lost due to overshoot
+        self._last_turn_sign = 0
+        self._overshoot_recover_end = 0.0  # wall-clock time when recovery finishes
 
         # ── Camera-reset state ──
         self._cam_reset_phase     = 0    # 0=tilt-down, 1=wait, 2=tilt-up, 3=wait2
@@ -159,7 +139,7 @@ class Navigator(Node):
         self._final_start_x = None
         self._final_start_y = None
 
-        # ══════════ Publishers (same as HW2 P7) ══════════
+        # ══════════ Publishers ══════════
         self.cmd_vel_pub    = self.create_publisher(Twist, '/cmd_vel', 10)
         self.status_pub     = self.create_publisher(String, '/brain/navigation_status', 10)
         self.target_pub     = self.create_publisher(String, '/vision/target', 10)
@@ -190,19 +170,13 @@ class Navigator(Node):
             JointState, '/joint_states',
             self.joint_states_cb, 10)
 
-        # Object detection from Vision node (HW2 P3-P4 pipeline output)
+        # Object detection from Vision node
         # Convention: x=pixel_x, y=pixel_y, z=bbox_area
         self.create_subscription(
             Point, '/object_detection',
             self.detection_cb, 10)
 
-        # AprilTag pose from Vision node (HW2 P6 solvePnP output)
-        # position.z = depth to tag in meters
-        self.create_subscription(
-            Pose, '/apriltag_pose',
-            self.apriltag_cb, 10)
-
-        # ══════════ Control loop (10 Hz, same rate as HW2 P7) ══════════
+        # ══════════ Control loop (10 Hz) ══════════
         self.timer = self.create_timer(0.1, self.control_loop)
 
         self.get_logger().info('Navigator ready. Waiting for Brain navigation goals on /brain/navigation_goal')
@@ -234,9 +208,9 @@ class Navigator(Node):
             
             # Use the robust position controller from the base node 
             target = Pose2D()
-            target.x = 0.0
-            target.y = 0.0
-            target.theta = 0.0
+            target.x = self.start_x
+            target.y = self.start_y
+            target.theta = self.start_theta
             self.target_pose_pub.publish(target)
             self.get_logger().info('Sent target_pose (0.0, 0.0, 0.0) for return')
 
@@ -262,11 +236,12 @@ class Navigator(Node):
             self.start_x = self.odom_x
             self.start_y = self.odom_y
             self.start_theta = self.odom_theta
+            self.get_logger().info(f'Saved start pose for odom return fallback: x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
             self.publish_status('navigating')
 
     def odom_cb(self, msg: Odometry):
         """
-        Odometry callback — identical pattern to HW2 P7.
+        Odometry callback.
 
         Extracts (x, y, theta) from the Odometry message.
         On the real robot and in MuJoCo sim, /odom is published
@@ -274,7 +249,7 @@ class Navigator(Node):
         """
         self.odom_x = msg.pose.pose.position.x
         self.odom_y = msg.pose.pose.position.y
-        # Extract yaw from quaternion (same math you'd use in HW2 P7)
+        # Extract yaw from quaternion
         q = msg.pose.pose.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
@@ -308,14 +283,9 @@ class Navigator(Node):
             pass
 
     def detection_cb(self, msg: Point):
-        """Object detection from Vision node (HW2 P3-P4 pipeline)."""
+        """Object detection from Vision node."""
         self.latest_detection = msg
         self.detection_stamp = time.time()
-
-    def apriltag_cb(self, msg: Pose):
-        """AprilTag PnP pose from Vision node (HW2 P6 solvePnP)."""
-        self.apriltag_pose = msg
-        self.apriltag_stamp = time.time()
 
     # ═══════════════════════════════════════════════════════════
     #  CONTROL LOOP (10 Hz)
@@ -324,6 +294,8 @@ class Navigator(Node):
     def control_loop(self):
         if self.state == STATE_SCANNING:
             self.do_scan()
+        elif self.state == STATE_PAUSING:
+            self.do_pause()
         elif self.state == STATE_APPROACHING:
             self.do_approach()
         elif self.state == STATE_FINE_CENTERING:
@@ -334,10 +306,10 @@ class Navigator(Node):
             self.do_final_approach()
         elif self.state == STATE_RETURNING:
             self.do_return()
-        # IDLE and ARRIVED: do nothing, wait for Brain
+        # IDLE, ARRIVED: do nothing, wait for Brain
 
     # ═══════════════════════════════════════════════════════════
-    #  STEP B: SCAN (spin, stop early if target found)
+    #  SCAN (spin, stop early if target found)
     # ═══════════════════════════════════════════════════════════
 
     def do_scan(self):
@@ -377,9 +349,9 @@ class Navigator(Node):
             self.publish_status('failed')
 
     # ═══════════════════════════════════════════════════════════
-    #  STEPS D+E: VISUAL SERVO APPROACH
+    #  VISUAL SERVO APPROACH
     #
-    #  Same Kp structure as HW2 P7, but:
+    #  Proportional controller structure:
     #    reference = image center (320 px)
     #    measurement = object pixel_x from Vision node
     #    error = reference - measurement
@@ -387,91 +359,134 @@ class Navigator(Node):
     # ═══════════════════════════════════════════════════════════
 
     def do_approach(self):
-        # ── Check "sufficiently close" via AprilTag PnP (HW2 P6) ──
-        if self._has_fresh_apriltag():
-            depth = self.apriltag_pose.position.z
-            if depth < CLOSE_DEPTH_PNP:
-                self.send_vel(0.0, 0.0)
-                self.state = STATE_ARRIVED
-                self.get_logger().info(
-                    f'ARRIVED — AprilTag depth = {depth:.2f}m < {CLOSE_DEPTH_PNP}m')
-                self.publish_status('arrived')
-                return
+        """
+        Two-phase visual-servo approach.
 
+        Phase 0 (ALIGNING):
+          Rotate in place (no forward motion) using sign-preserving min-omega
+          of 0.15 rad/s until |error_x| <= CENTERING_SLOWDOWN_ZONE.
+          Then pause 5 s and enter Phase 1.
+
+        Phase 1 (ADVANCING):
+          Drive forward (no rotation) using proportional slowdown until the
+          object reaches the bottom of the frame.  Then pause 5 s and enter
+          FINE_CENTERING.
+        """
         # ── Check stale detection (Object Lost) ──
         if not self._has_fresh_detection():
-            self.get_logger().warn('Detection lost! Reverting to SCANNING to find it again...')
+            # Brief counter-rotate before committing to a full 360° re-scan.
+            # If we were just turning and the object vanished, we likely overshot it.
+            now = time.time()
+            if self._last_turn_sign != 0 and now < self._overshoot_recover_end:
+                # Still within the recovery window — counter-rotate
+                self.send_vel(0.0, OVERSHOOT_RECOVER_VEL * self._last_turn_sign)
+                return
+            # Recovery window exhausted or no prior turn — fall back to scan
+            self.get_logger().warn('Detection lost during approach — reverting to SCAN')
             self.send_vel(0.0, 0.0)
             self.state = STATE_SCANNING
             self.scan_start_time = time.time()
             self.scan_accumulated_theta = 0.0
             self.last_scan_theta = self.odom_theta
+            self._last_turn_sign = 0
+            self._approach_phase = 0
             self.publish_status('navigating (resuming scan)')
             return
 
-        # ── Visual Servoing with Lag Protection ──
-        # If the frame is older than 0.5s, stop to prevent massive overshoot (shimmying)
+        # ── Lag protection — if frame is stale, hold still ──
         age = time.time() - self.detection_stamp
         if age > 0.5:
             self.send_vel(0.0, 0.0)
             return
 
-        det = self.latest_detection
-        pixel_x   = det.x
-        pixel_y   = det.y
-        bbox_area = det.z
-
-        # ── Check if close enough — banana at bottom of frame ──
-        # Transition to fine-centering rather than immediately declaring arrived.
-        if pixel_y > IMAGE_HEIGHT - 50:
-            self.send_vel(0.0, 0.0)
-            self.state = STATE_FINE_CENTERING
-            self._fine_center_start = None
-            self.get_logger().info(
-                f'Banana at bottom (y={pixel_y:.0f}) — transitioning to FINE_CENTERING')
-            self.publish_status('fine_centering')
-            return
-
-        # ── Proportional control (HW2 P7 pattern) ──
-        # error in pixels
+        det     = self.latest_detection
+        pixel_x = det.x
+        pixel_y = det.y
         error_x = IMAGE_CENTER_X - pixel_x
+        omega_raw = KP_ANGULAR * error_x
 
-        # Angular: Kp * error (same as HW2 P7, different units)
-        omega = max(0.15, KP_ANGULAR * error_x)
-        if abs(error_x) < CENTERING_DEADZONE:
-            omega = 0.0
+        # ─────────────────────────────────────────────
+        #  PHASE 0: ALIGNING — rotate until centred
+        # ─────────────────────────────────────────────
+        if self._approach_phase == 0:
+            if abs(error_x) <= CENTERING_SLOWDOWN_ZONE:
+                # Started being centered?
+                if self._align_center_start_time is None:
+                    self._align_center_start_time = time.time()
+                
+                # Check if we've been centered long enough
+                elapsed = time.time() - self._align_center_start_time
+                if elapsed >= CENTERING_HOLD_TIME:
+                    pause_duration = 5.0
+                    self.get_logger().info(
+                        f'APPROACH ph0: stable alignment for {elapsed:.1f}s — '
+                        f'pausing {pause_duration} s before ADVANCE')
+                    self._approach_phase = 1
+                    self._last_turn_sign = 0
+                    self._align_center_start_time = None
+                    self.start_pause(STATE_APPROACHING, 5.0)
+                    return
+                else:
+                    # Within zone but waiting for timer — stop turning
+                    self.send_vel(0.0, 0.0)
+                    return
+            else:
+                # Out of zone — reset timer
+                self._align_center_start_time = None
 
-        # ── FACE-FIRST ALIGNMENT (User request) ──
-        # If centering error is large, don't move forward yet.
-        # This prevents the "arc" motion and ensure a direct "b-line".
-        # Once reasonably centered, drive while continuing to adjust.
-        if abs(error_x) > CENTERING_SLOWDOWN_ZONE:
-            v = 0.0
-            
-            # Throttle the logging to avoid spamming at 10Hz
-            import time as _t
-            _now = _t.time()
+            # Turn speed logic with physical limit (0.15 rad/s) for in-place turns
+            omega = math.copysign(max(CENTERING_MIN_OMEGA, abs(omega_raw)), omega_raw)
+            self._last_turn_sign = int(math.copysign(1, omega))
+            self._overshoot_recover_end = time.time() + OVERSHOOT_RECOVER_DUR
+
+            _now = time.time()
             if _now - getattr(self, '_last_align_log', 0) >= 0.5:
                 self._last_align_log = _now
-                self.get_logger().info(f'APPROACH: face-first aligning (offset {error_x:.1f}px), omega: {omega:.1f}')
-        else:
-            # ── Proportional Slowdown (User request) ──
-            # v = KP_APPROACH_LINEAR * (target_y - current_y)
-            target_y = IMAGE_HEIGHT - 30
-            error_y = target_y - pixel_y
-            
-            # v scales from APPROACH_LINEAR_VEL down to MIN_APPROACH_LINEAR_VEL
+                self.get_logger().info(
+                    f'APPROACH ph0: aligning err_x={error_x:.1f}px, omega={omega:.3f}')
+
+            self.send_vel(0.0, omega)
+            return
+
+        # ─────────────────────────────────────────────
+        #  PHASE 1: ADVANCING — forward, with lateral steering
+        # ─────────────────────────────────────────────
+        if self._approach_phase == 1:
+            # Object reached bottom of frame
+            if pixel_y > IMAGE_HEIGHT - TARGET_Y_OFFSET:
+                pause_duration = 5.0
+                self.get_logger().info(
+                    f'APPROACH ph1: object at bottom (y={pixel_y:.0f}) — '
+                    f'pausing {pause_duration} s before FINE_CENTERING')
+                self.start_pause(STATE_FINE_CENTERING, pause_duration)
+                return
+
+            target_y = IMAGE_HEIGHT - TARGET_Y_OFFSET
+            error_y  = target_y - pixel_y
             v = KP_APPROACH_LINEAR * error_y
             v = max(MIN_APPROACH_LINEAR_VEL, min(v, APPROACH_LINEAR_VEL))
 
-        self.send_vel(v, omega)
+            # Simultaneous lateral correction — if the object drifts sideways
+            # during the forward drive, steer gently to keep it centered.
+            # No minimum omega here as forward motion helps the turn.
+            omega = omega_raw
+
+            _now = time.time()
+            if _now - getattr(self, '_last_adv_log', 0) >= 0.5:
+                self._last_adv_log = _now
+                self.get_logger().info(
+                    f'APPROACH ph1: v={v:.3f} m/s, omega={omega:.3f}, pixel_y={pixel_y:.0f}, error_x={error_x:.1f}px')
+
+            self.send_vel(v, omega)
+            return
 
     # ═══════════════════════════════════════════════════════════
     #  FINE CENTERING — precise lateral alignment before camera reset
     # ═══════════════════════════════════════════════════════════
 
     def do_fine_centering(self):
-        """Hold centred for FINE_CENTERING_HOLD seconds, then move to CAMERA_RESET."""
+        """Rotate in place with physical min-omega until centred for 
+        FINE_CENTERING_HOLD seconds, then pause 5 s before CAMERA_RESET."""
         if not self._has_fresh_detection():
             # Lost the target — go back to scanning
             self.send_vel(0.0, 0.0)
@@ -480,22 +495,27 @@ class Navigator(Node):
             self.scan_accumulated_theta = 0.0
             self.last_scan_theta = self.odom_theta
             self._fine_center_start = None
+            self._approach_phase = 0
             self.get_logger().warn('Fine-center: detection lost, reverting to SCAN')
             return
 
+        # Lag protection — if frame is stale, hold still
         age = time.time() - self.detection_stamp
         if age > 0.5:
             self.send_vel(0.0, 0.0)
             return
 
-        det = self.latest_detection
+        det     = self.latest_detection
         error_x = IMAGE_CENTER_X - det.x
 
-        omega = KP_ANGULAR * error_x
+        # Sign-preserving minimum omega (real robot cannot move slower than 0.15)
+        omega_raw = KP_ANGULAR * error_x
         if abs(error_x) < FINE_CENTERING_DEADZONE:
             omega = 0.0
+        else:
+            omega = math.copysign(max(CENTERING_MIN_OMEGA, abs(omega_raw)), omega_raw)
 
-        # Log diagnostic info every ~0.5s
+        # Log diagnostic info every ~0.5 s
         now = time.time()
         if now - getattr(self, '_last_fine_log', 0) >= 0.5:
             self._last_fine_log = now
@@ -512,13 +532,13 @@ class Navigator(Node):
         if abs(error_x) < FINE_CENTERING_DEADZONE:
             if self._fine_center_start is None:
                 self._fine_center_start = time.time()
-            elif time.time() - self._fine_center_start >= FINE_CENTERING_HOLD:
-                self.send_vel(0.0, 0.0)
-                self.state = STATE_CAMERA_RESET
-                self._cam_reset_phase   = 0
-                self._cam_reset_phase_t = time.time()
-                self.get_logger().info('Fine-centering done — transitioning to CAMERA_RESET')
+                self.get_logger().info('Fine-centering: within deadzone, starting hold timer...')
+            elif time.time() - self._fine_center_start >=FINE_CENTERING_HOLD:
+                pause_duration = 5.0
+                self.get_logger().info(f'Fine-centering done — pausing {pause_duration} s before CAMERA_RESET')
+                self._fine_center_start = None
                 self.publish_status('camera_reset')
+                self.start_pause(STATE_CAMERA_RESET, pause_duration)
         else:
             self._fine_center_start = None  # reset hold timer if we drift
 
@@ -531,6 +551,43 @@ class Navigator(Node):
         msg = Float64MultiArray()
         msg.data = [pan, tilt]
         self.pan_tilt_pub.publish(msg)
+
+    # ═══════════════════════════════════════════════════════════
+    #  PAUSE — generic 5-second countdown between steps
+    # ═══════════════════════════════════════════════════════════
+
+    def start_pause(self, next_state: str, duration: float = 5.0):
+        """Stop the robot and wait *duration* seconds before entering *next_state*."""
+        self.send_vel(0.0, 0.0)
+        self._pause_end_time       = time.time() + duration
+        self._pause_next_state     = next_state
+        self._pause_last_countdown = int(math.ceil(duration))
+        self.state = STATE_PAUSING
+        self.get_logger().info(
+            f'PAUSE: {duration:.0f} s before {next_state}  '
+            f'[{self._pause_last_countdown}]')
+
+    def do_pause(self):
+        """Count down to zero with 1 s granularity logs, then advance."""
+        remaining = self._pause_end_time - time.time()
+        secs_left = int(math.ceil(remaining))
+        if secs_left != self._pause_last_countdown and secs_left >= 0:
+            self._pause_last_countdown = secs_left
+            if secs_left > 0:
+                self.get_logger().info(f'PAUSE: {secs_left}...')
+        if remaining <= 0.0:
+            next_st = self._pause_next_state
+            self.get_logger().info(f'PAUSE done — entering {next_st}')
+            if next_st == STATE_CAMERA_RESET:
+                self._cam_reset_phase   = 0
+                self._cam_reset_phase_t = time.time()
+            elif next_st == STATE_FINE_CENTERING:
+                self._fine_center_start = None
+            self.state = next_st
+
+    # ═══════════════════════════════════════════════════════════
+    #  CAMERA RESET — tilt down then up so object visible close
+    # ═══════════════════════════════════════════════════════════
 
     def do_camera_reset(self):
         now = time.time()
@@ -561,7 +618,7 @@ class Navigator(Node):
             self.publish_status('final_approach')
 
     # ═══════════════════════════════════════════════════════════
-    #  FINAL APPROACH — odom-based 0.7 m drive (no YOLO needed)
+    #  FINAL APPROACH — odom-based 0.5 m drive (no YOLO needed)
     # ═══════════════════════════════════════════════════════════
 
     def do_final_approach(self):
@@ -586,13 +643,11 @@ class Navigator(Node):
             self.publish_status('arrived')
 
     # ═══════════════════════════════════════════════════════════
-    #  STEP I: RETURN TO START
+    #  RETURN TO START
     #
     #  Strategy:
-    #    1. If AprilTag at home is visible → visual servo to it
-    #       using PnP pose (tx, tz) from HW2 P6
-    #    2. If not visible → use /odom to drive roughly toward
-    #       home (HW2 P7 style), then AprilTag for final approach
+    #    Use robust position controller from the base node by
+    #    waiting for the /base/goal_reached flag.
     # ═══════════════════════════════════════════════════════════
 
     def do_return(self):
@@ -625,14 +680,11 @@ class Navigator(Node):
         self.status_pub.publish(msg)
 
     def _has_fresh_detection(self) -> bool:
+        self.get_logger().debug(f'Checking detection freshness: latest_detection={self.latest_detection}, '
+                               f'detection_stamp={self.detection_stamp:.2f}, now={time.time():.2f}, age={time.time() - self.detection_stamp:.2f}s')
         if self.latest_detection is None:
             return False
         return (time.time() - self.detection_stamp) < self.detection_timeout
-
-    def _has_fresh_apriltag(self) -> bool:
-        if self.apriltag_pose is None:
-            return False
-        return (time.time() - self.apriltag_stamp) < self.apriltag_timeout
 
     @staticmethod
     def _wrap(angle: float) -> float:

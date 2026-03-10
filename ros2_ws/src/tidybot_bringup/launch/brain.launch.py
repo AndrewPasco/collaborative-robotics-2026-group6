@@ -102,7 +102,7 @@ def generate_launch_description():
 
     brain = Node(
         package='tidybot_bringup',
-        executable='brain_node.py',
+        executable='brain_node_task1.py',
         name='brain_node',
         output='screen',
     )
