@@ -55,6 +55,7 @@ install(PROGRAMS
   scripts/vision-manipulation/pointnet_gpd_node.py
   scripts/vision-manipulation/contact_graspnet_node.py
   scripts/vision-manipulation/simple_grasp_planner_node.py
+  scripts/vision-manipulation/point_cloud_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

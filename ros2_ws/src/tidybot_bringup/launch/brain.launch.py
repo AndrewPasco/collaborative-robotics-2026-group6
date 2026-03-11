@@ -114,6 +114,13 @@ def generate_launch_description():
         output='screen',
     )
 
+    point_cloud = Node(
+        package='tidybot_bringup',
+        executable='point_cloud_node.py',
+        name='point_cloud_node',
+        output='screen',
+    )
+
     # ── Real-robot compatibility: arm_controller_node ────────────────
     # When use_sim is false, we need to launch the controller node ourselves 
     # to bridge ArmCommand messages to the real hardware joint topics.
@@ -147,6 +154,7 @@ def generate_launch_description():
         speech,
         navigation,
         vision,
+        point_cloud,
         manipulation,
         right_arm_controller,
         left_arm_controller,
