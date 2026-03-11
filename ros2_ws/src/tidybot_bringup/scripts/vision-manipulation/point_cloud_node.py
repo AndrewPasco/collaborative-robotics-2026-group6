@@ -69,7 +69,7 @@ class DepthToPointCloudNode(Node):
             self.destroy_subscription(self.info_sub)
 
     def start_cb(self, msg):
-        if msg.data == "grab":
+        if msg.data == "final_approach":
             self.sending = True
 
     def end_cb(self, msg):
