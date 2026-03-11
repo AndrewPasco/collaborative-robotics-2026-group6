@@ -80,26 +80,25 @@ from interbotix_xs_msgs.msg import JointGroupCommand
 GRIPPER_OPEN = 0.0
 GRIPPER_CLOSE = 1.0
 
-# Vertical offsets (meters)
-PREGRASP_Z_OFFSET = 0.08   # 8 cm above the grasp pose
-LIFT_HEIGHT = 0.15          # 15 cm lift after grasping
+PREGRASP_Z_OFFSET = 0.08
+PREGRASP_X_OFFSET = 0.08
+LIFT_HEIGHT = 0.15
 
-# Sleep pose (idle/return position — from test_arms_real.py)
 SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
 FORWARD_POSE = [0.0, -0.5, 0.5, 0.0, 0.0, 0.0]
 
 # Joint state feedback thresholds
-ARM_ARRIVAL_TOLERANCE = 0.05     # rad – how close joints must be to target
-GRIPPER_OPEN_THRESHOLD = 0.03    # finger position above this = open enough
-GRIPPER_CLOSED_THRESHOLD = 0.018 # finger position below this = fully closed
-PAUSE_AT_GRASP_SECS = 1.0       # seconds to hold still at grasp before closing
+ARM_ARRIVAL_TOLERANCE = 0.05
+GRIPPER_OPEN_THRESHOLD = 0.03
+GRIPPER_CLOSED_THRESHOLD = 0.018
+PAUSE_AT_GRASP_SECS = 1.0
 
-# Gripper stall detection (for gripping objects that prevent full closure)
-STALL_CHECK_DELAY = 3.0      # seconds – don't check for stalls until grippers have had time to move
-STALL_THRESHOLD = 0.001      # meters – if finger gap changes less than this, stalled
-STALL_WINDOW = 2.0           # seconds – compare current gap to gap this long ago
-FIRM_GRIP_HOLD = 5.0         # seconds – keep closing after stall detected
-GRIPPER_SAFETY_TIMEOUT = 20.0  # seconds – max wait if stall detection never triggers
+# Gripper stall detection
+STALL_CHECK_DELAY = 3.0
+STALL_THRESHOLD = 0.001
+STALL_WINDOW = 2.0
+FIRM_GRIP_HOLD = 5.0
+GRIPPER_SAFETY_TIMEOUT = 20.0
 
 # Fingers-down orientation (qw, qx, qy, qz)
 ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)
@@ -149,7 +148,6 @@ class ManipulationExecutor(Node):
 
     def __init__(self):
         super().__init__("manipulation_executor")
-
         self.cb_group = ReentrantCallbackGroup()
 
         # ─── Parameters ─────────────────────────────────────────────────
@@ -189,10 +187,15 @@ class ManipulationExecutor(Node):
         self.current_joint_state = None
         self.joint_positions_by_name = {}
 
+        # ─── Trajectory Interpolation State ─────────────────────────────
+        self.interp_start_pos = None
+        self.interp_target_pos = None
+        self.interp_start_time = None
+        self.interp_duration = None
+
         # ================================================================
         #  SUBSCRIBERS
         # ================================================================
-
         self.joint_state_sub = self.create_subscription(
             JointState, "/joint_states", self._joint_state_cb, 10,
             callback_group=self.cb_group,
@@ -232,7 +235,6 @@ class ManipulationExecutor(Node):
         # ================================================================
         #  PUBLISHERS (both arms — Float64MultiArray on joint_cmd/gripper)
         # ================================================================
-
         self.arm_pubs = {}
         self.gripper_pubs = {}
         for arm in ("right", "left"):
@@ -248,30 +250,19 @@ class ManipulationExecutor(Node):
             'left': self.create_publisher(JointGroupCommand, '/left_arm/commands/joint_group', 10),
         }
 
-        self.status_pub = self.create_publisher(
-            String, "/manipulation/task_status", 10,
-        )
-        self.brain_status_pub = self.create_publisher(
-            String, "/brain/manipulation_status", 10,
-        )
+        self.status_pub = self.create_publisher(String, "/manipulation/task_status", 10)
+        self.brain_status_pub = self.create_publisher(String, "/brain/manipulation_status", 10)
 
         # ================================================================
         #  SERVICE CLIENT — motion planner
         # ================================================================
-
-        self.plan_client = self.create_client(
-            PlanToTarget, '/plan_to_target',
-            callback_group=self.cb_group,
-        )
-
+        self.plan_client = self.create_client(PlanToTarget, '/plan_to_target', callback_group=self.cb_group)
         if self.use_planner:
             self.get_logger().info("Waiting for /plan_to_target service...")
             if self.plan_client.wait_for_service(timeout_sec=5.0):
                 self.get_logger().info("Motion planner service connected!")
             else:
-                self.get_logger().warn(
-                    "Motion planner not available! Falling back to hardcoded IK."
-                )
+                self.get_logger().warn("Motion planner not available! Falling back to hardcoded IK.")
                 self.use_planner = False
 
         # ================================================================
@@ -283,9 +274,7 @@ class ManipulationExecutor(Node):
         #  STARTUP: hardcoded pose after 3 seconds
         # ================================================================
         if self.use_hardcoded:
-            self.startup_timer = self.create_timer(
-                3.0, self._publish_hardcoded_pose, callback_group=self.cb_group,
-            )
+            self.startup_timer = self.create_timer(3.0, self._publish_hardcoded_pose, callback_group=self.cb_group)
             self.get_logger().info("Will publish hardcoded test pose in 3s...")
         else:
             self.get_logger().info(
@@ -297,7 +286,6 @@ class ManipulationExecutor(Node):
     # =====================================================================
     #  JOINT STATE HELPERS
     # =====================================================================
-
     def _joint_state_cb(self, msg: JointState):
         self.current_joint_state = msg
         for i, name in enumerate(msg.name):
@@ -333,27 +321,56 @@ class ManipulationExecutor(Node):
 
     def _gripper_is_closed(self, arm: str):
         fingers = self._get_finger_positions(arm)
-        if fingers is None:
-            return False
-        return max(fingers) < GRIPPER_CLOSED_THRESHOLD
+        return False if fingers is None else max(fingers) < GRIPPER_CLOSED_THRESHOLD
 
     def _gripper_is_open(self, arm: str):
         fingers = self._get_finger_positions(arm)
-        if fingers is None:
-            return False
-        return min(fingers) > GRIPPER_OPEN_THRESHOLD
+        return False if fingers is None else min(fingers) > GRIPPER_OPEN_THRESHOLD
 
     def _get_finger_gap(self, arm: str):
         """Return sum of both finger positions (proxy for gripper aperture)."""
         fingers = self._get_finger_positions(arm)
-        if fingers is None:
-            return None
-        return fingers[0] + fingers[1]
+        return None if fingers is None else fingers[0] + fingers[1]
+
+    # =====================================================================
+    #  INTERPOLATION HELPERS
+    # =====================================================================
+    def start_interpolated_move(self, arm_name: str, target_pose_array: list, max_joint_speed: float = 0.5):
+        """Sets up the trajectory state variables without blocking the timer thread."""
+        current = [self.joint_positions_by_name[name] for name in ARM_JOINT_NAMES[arm_name]]
+        
+        self.interp_start_pos = np.array(current)
+        self.interp_target_pos = np.array(target_pose_array)
+        self.interp_start_time = time.time()
+        
+        max_diff = np.max(np.abs(self.interp_target_pos - self.interp_start_pos))
+        self.interp_duration = max(max_diff / max_joint_speed, 2.0)
+        
+        self.current_arm_target = list(target_pose_array)
+        
+        self.get_logger().info(
+            f"  Starting interpolated move over {self.interp_duration:.1f}s "
+            f"(max joint diff: {max_diff:.2f} rad)"
+        )
+
+    def _tick_interpolation(self, arm: str, now: float):
+        """Ticks the interpolation math forward and publishes the joint command."""
+        if self.interp_start_time is not None and self.interp_duration is not None:
+            t = (now - self.interp_start_time) / self.interp_duration
+            t = min(t, 1.0) # Clamp to exactly 1.0 at the end
+            
+            # Cosine interpolation for smooth acceleration/deceleration
+            alpha = 0.5 * (1 - np.cos(np.pi * t))
+            q_current = self.interp_start_pos + alpha * (self.interp_target_pos - self.interp_start_pos)
+            
+            cmd = JointGroupCommand()
+            cmd.name = f'{arm}_arm'
+            cmd.cmd = q_current.tolist()
+            self.arm_cmd_pubs[arm].publish(cmd)
 
     # =====================================================================
     #  50 Hz CONTROL LOOP
     # =====================================================================
-
     def _control_loop(self):
         """
         Runs at 50 Hz. Every tick:
@@ -363,11 +380,10 @@ class ManipulationExecutor(Node):
         import time
         now = time.time()
 
-        # Always publish gripper for both arms at 50 Hz
-        for arm in ("right", "left"):
+        for arm_side in ("right", "left"):
             msg = Float64MultiArray()
-            msg.data = [float(self.gripper_values[arm])]
-            self.gripper_pubs[arm].publish(msg)
+            msg.data = [float(self.gripper_values[arm_side])]
+            self.gripper_pubs[arm_side].publish(msg)
 
         if self.state == "IDLE":
             return
@@ -386,9 +402,13 @@ class ManipulationExecutor(Node):
       
 
         # ── MOVE_PREGRASP ─────────────────────────────────────────────
-        elif self.state == "MOVE_PREGRASP":
+        if self.state == "MOVE_PREGRASP":
             if not self.arm_cmd_sent:
-                self._send_arm_to_pose(self.grasp_pose, z_offset=PREGRASP_Z_OFFSET)
+                offset_z = PREGRASP_Z_OFFSET if self.current_task == 0 else 0.0
+                offset_x = PREGRASP_X_OFFSET if self.current_task != 0 else 0.0
+                target_pose = copy.deepcopy(self.grasp_pose)
+                target_pose.position.x += offset_x
+                self._send_arm_to_pose(target_pose, z_offset=offset_z)
                 self.arm_cmd_sent = True
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Arm arrived at pre-grasp.")
@@ -406,9 +426,6 @@ class ManipulationExecutor(Node):
         # ── PAUSE_AT_GRASP ────────────────────────────────────────────
         elif self.state == "PAUSE_AT_GRASP":
             if elapsed > PAUSE_AT_GRASP_SECS:
-                self.get_logger().info(
-                    f"  Paused {PAUSE_AT_GRASP_SECS}s at grasp. Closing gripper..."
-                )
                 self._advance("CLOSE_GRIPPER")
 
         # ── CLOSE_GRIPPER (with stall detection) ─────────────────────
@@ -436,15 +453,8 @@ class ManipulationExecutor(Node):
                         # Gripper has stalled — gripping an object
                         if self.stall_detected_time is None:
                             self.stall_detected_time = now
-                            self.get_logger().info(
-                                f"  Gripper stall detected (gap={gap:.4f}). "
-                                f"Holding for {FIRM_GRIP_HOLD}s..."
-                            )
+                            self.get_logger().info(f"  Stall detected. Holding {FIRM_GRIP_HOLD}s...")
                         elif (now - self.stall_detected_time) > FIRM_GRIP_HOLD:
-                            fingers = self._get_finger_positions(arm)
-                            self.get_logger().info(
-                                f"  Firm grip hold complete (fingers: {fingers})."
-                            )
                             self._advance("MOVE_LIFT")
                             return
 
@@ -456,31 +466,16 @@ class ManipulationExecutor(Node):
                     f"Proceeding to lift (fingers: {fingers})."
                 )
                 self._advance("MOVE_LIFT")
-              
 
         elif self.state == "MOVE_LIFT":
             self.gripper_values[arm] = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
-                if self.current_task == 0:
-                    self.get_logger().info(f"  Lifting to sleep pose with planner: {SLEEP_POSE}")
-                    self.go_to_sleep_pose(arm, max_joint_speed=0.3)
-                    self.arm_cmd_sent = True
-                    # # Task 1: lift to sleep pose (direct joint command)
-                    # msg = Float64MultiArray()
-                    # msg.data = list(SLEEP_POSE)
-                    # self.arm_pubs[arm].publish(msg)
-                    # self.current_arm_target = list(SLEEP_POSE)
-                    # self.get_logger().info(
-                    #     f"  Task 1: sending {arm} arm to sleep pose for lift."
-                    # )
-                    # # self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
-                # else:
-                #     # Task 3: lift to grasp + 15cm (IK via planner)
-                #     if self.arm_name == "right":
-                #         # twist
-                #         # self._send_arm_to_pose(self.grasp_pose, z_offset=LIFT_HEIGHT)
-                #         pass
+                self.get_logger().info(f"  Lifting to sleep pose: {SLEEP_POSE}")
+                self.start_interpolated_move(arm, SLEEP_POSE, max_joint_speed=0.3)
                 self.arm_cmd_sent = True
+
+            self._tick_interpolation(arm, now)
+
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Arm arrived at lift (sleep) pose.")
                 # task 3, right arm
@@ -488,7 +483,6 @@ class ManipulationExecutor(Node):
                     self._advance("TWIST")
                 else:
                     self._advance("DONE")
-                # self._advance("DONE")
 
         # ── TWIST (task 3, right arm: twist wrist 180° to unscrew) ──
         elif self.state == "TWIST":
@@ -498,51 +492,53 @@ class ManipulationExecutor(Node):
                 if current is not None:
                     twist_target = list(current)
                     twist_target[5] += np.pi  # wrist_rotate += 180°
-                    self.current_arm_target = twist_target
-                    msg = Float64MultiArray()
-                    msg.data = twist_target
-                    self.arm_pubs[arm].publish(msg)
-                    self.get_logger().info(
-                        f"  Twisting wrist_rotate by 180°: "
-                        f"{current[5]:.2f} → {twist_target[5]:.2f} rad"
-                    )
-                else:
-                    self.get_logger().warn("  Cannot read arm positions for twist.")
+                    self.start_interpolated_move(arm, twist_target, max_joint_speed=0.5)
                 self.arm_cmd_sent = True
+            
+            self._tick_interpolation(arm, now)
+
             if self._arm_at_target(arm, self.current_arm_target):
                 self.get_logger().info("  Twist complete.")
-                # lift arm to sleep pose after cap is off
-                self.get_logger().info(f"  Lifting cap back to sleep pose with planner: {SLEEP_POSE}")
-                self.go_to_sleep_pose(arm, max_joint_speed=0.3)
+                self._advance("MOVE_POST_TWIST_LIFT")
+
+        elif self.state == "MOVE_POST_TWIST_LIFT":
+            self.gripper_values[arm] = GRIPPER_CLOSE
+            if not self.arm_cmd_sent:
+                self.get_logger().info(f"  Lifting cap to sleep pose: {SLEEP_POSE}")
+                self.start_interpolated_move(arm, SLEEP_POSE, max_joint_speed=0.3)
                 self.arm_cmd_sent = True
+
+            self._tick_interpolation(arm, now)
+
+            if self._arm_at_target(arm, self.current_arm_target):
+                self.get_logger().info("  Arm arrived at post-twist lift pose.")
                 self._advance("DONE")
 
         elif self.state == "MOVE_DEPOSIT":
-          if not self.arm_cmd_sent:
-              # Send arm to forward pose
-              self.get_logger().info(f"  Moving to deposit: {FORWARD_POSE}")
-              self.go_to_forward_pose(arm, max_joint_speed=0.3)
-              self.arm_cmd_sent = True
-          if self._arm_at_target(arm, self.current_arm_target):
-              self.get_logger().info("  Arm arrived at deposit pose.")
-              self._advance("OPEN_GRIPPER")
+            if not self.arm_cmd_sent:
+                self.get_logger().info(f"  Moving to deposit: {FORWARD_POSE}")
+                self.start_interpolated_move(arm, FORWARD_POSE, max_joint_speed=0.3)
+                self.arm_cmd_sent = True
+
+            self._tick_interpolation(arm, now)
+
+            if self._arm_at_target(arm, self.current_arm_target):
+                self.get_logger().info("  Arm arrived at deposit pose.")
+                self._advance("OPEN_GRIPPER")
 
         elif self.state == "OPEN_GRIPPER":
-          self.gripper_values[arm] = GRIPPER_OPEN
-          if not self.arm_cmd_sent:
-              self.get_logger().info("  Opening gripper to release banana...")
-              self.arm_cmd_sent = True
-          if elapsed > 2.0:  # give gripper time to open
-              self.get_logger().info("  Gripper opened, deposit complete.")
-              self._advance("DONE")
+            self.gripper_values[arm] = GRIPPER_OPEN
+            if not self.arm_cmd_sent:
+                self.get_logger().info("  Opening gripper to release banana...")
+                self.arm_cmd_sent = True
+            if elapsed > 2.0:
+                self.get_logger().info("  Gripper opened, deposit complete.")
+                self._advance("DONE")
 
         # ── DONE ──────────────────────────────────────────────────────
         elif self.state == "DONE":
-            # if self.current_task == 0:
-            #   self.gripper_values[arm] = GRIPPER_CLOSE
             if not self.arm_cmd_sent:
-                fingers = self._get_finger_positions(arm)
-                self.get_logger().info(f"  Final gripper state (fingers: {fingers}).")
+                self.get_logger().info("  Manipulation sequence complete!")
                 self._publish_status(REASON_SUCCESS)
                 # Notify brain node
                 brain_msg = String()
@@ -553,92 +549,9 @@ class ManipulationExecutor(Node):
                 )
                 self.arm_cmd_sent = True
 
-    def go_to_sleep_pose(self, arm_name: str, max_joint_speed: float = 0.5):
-        """Send arm to sleep pose using smooth interpolated trajectory.
-
-        Args:
-            arm_name: 'right' or 'left'
-            max_joint_speed: Maximum joint velocity in rad/s (default 0.5 rad/s ~ 30 deg/s)
-        """
-        # Spin to get latest joint states
-        rclpy.spin_once(self, timeout_sec=0.1)
-
-        # Get current and target positions
-        current = [self.joint_positions_by_name[name] for name in ARM_JOINT_NAMES[arm_name]]
-        target = np.array(SLEEP_POSE)
-
-        # Calculate required duration based on max joint difference
-        max_diff = np.max(np.abs(target - current))
-        duration = max(max_diff / max_joint_speed, 2.0)  # At least 2 seconds
-
-        self.get_logger().info(f'Moving {arm_name} arm to sleep pose over {duration:.1f}s (max joint diff: {max_diff:.2f} rad)')
-
-        # Interpolate trajectory with smooth cosine profile
-        rate_hz = 50.0
-        dt = 1.0 / rate_hz
-        num_steps = max(int(duration * rate_hz), 1)
-
-        for i in range(num_steps + 1):
-            t = i / num_steps
-            # Cosine interpolation for smooth acceleration/deceleration
-            alpha = 0.5 * (1 - np.cos(np.pi * t))
-
-            # Interpolate
-            q = current + alpha * (target - current)
-
-            cmd = JointGroupCommand()
-            cmd.name = f'{arm_name}_arm'
-            cmd.cmd = q.tolist()
-            self.arm_cmd_pubs[arm_name].publish(cmd)
-
-            if i < num_steps:
-                time.sleep(dt)
-
-    def go_to_forward_pose(self, arm_name: str, max_joint_speed: float = 0.5):
-        """Send arm to forward pose using smooth interpolated trajectory.
-
-        Args:
-            arm_name: 'right' or 'left'
-            max_joint_speed: Maximum joint velocity in rad/s (default 0.5 rad/s ~ 30 deg/s)
-        """
-        # Spin to get latest joint states
-        rclpy.spin_once(self, timeout_sec=0.1)
-
-        # Get current and target positions
-        current = [self.joint_positions_by_name[name] for name in ARM_JOINT_NAMES[arm_name]]
-        target = np.array(FORWARD_POSE)
-
-        # Calculate required duration based on max joint difference
-        max_diff = np.max(np.abs(target - current))
-        duration = max(max_diff / max_joint_speed, 2.0)  # At least 2 seconds
-
-        self.get_logger().info(f'Moving {arm_name} arm to forward pose over {duration:.1f}s (max joint diff: {max_diff:.2f} rad)')
-
-        # Interpolate trajectory with smooth cosine profile
-        rate_hz = 50.0
-        dt = 1.0 / rate_hz
-        num_steps = max(int(duration * rate_hz), 1)
-
-        for i in range(num_steps + 1):
-            t = i / num_steps
-            # Cosine interpolation for smooth acceleration/deceleration
-            alpha = 0.5 * (1 - np.cos(np.pi * t))
-
-            # Interpolate
-            q = current + alpha * (target - current)
-
-            cmd = JointGroupCommand()
-            cmd.name = f'{arm_name}_arm'
-            cmd.cmd = q.tolist()
-            self.arm_cmd_pubs[arm_name].publish(cmd)
-
-            if i < num_steps:
-                time.sleep(dt)
-    
     # =====================================================================
     #  STATE HELPERS
     # =====================================================================
-
     def _advance(self, new_state: str):
         """Transition to a new state, reset timing and command flag."""
         self.state = new_state
@@ -647,35 +560,24 @@ class ManipulationExecutor(Node):
         # Reset stall detection
         self.grip_gap_history.clear()
         self.stall_detected_time = None
+        # Reset interpolation variables
+        self.interp_start_time = None
+        self.interp_duration = None
 
     def _log_state(self):
         task_label = "task1" if self.current_task == 0 else "task3"
-        if self.current_task == 0:
-            # Task 1: 8 states (includes MOVE_TO_SLEEP)
-            messages = {
-                # "MOVE_TO_SLEEP":  f"Step 1/8 – [{task_label}] Moving to sleep pose ({self.arm_name} arm)...",
-                # "OPEN_GRIPPER":   f"Step 2/8 – [{task_label}] Opening gripper ({self.arm_name} arm)...",
-                "MOVE_PREGRASP":  f"Step 1/6 – [{task_label}] Moving to PRE-GRASP...",
-                "MOVE_GRASP":     f"Step 2/6 – [{task_label}] Descending to GRASP...",
-                "PAUSE_AT_GRASP": f"Step 3/6 – [{task_label}] Holding at grasp for {PAUSE_AT_GRASP_SECS}s...",
-                "CLOSE_GRIPPER":  f"Step 4/6 – [{task_label}] Closing gripper (stall detection)...",
-                "MOVE_LIFT":      f"Step 5/6 – [{task_label}] LIFTING to sleep pose...",
-                "DONE":           f"Step 6/6 – [{task_label}] Done!",
-                "MOVE_DEPOSIT":    f"Step 1/2 - Task 2: Move to forward pose (above bin)",
-                "OPEN_GRIPPER":    f"Step 2/2 - Task 2: Open gripper (release banana)",
-            }
-        else:
-            # Task 3: 7 states (no MOVE_TO_SLEEP)
-            messages = {
-                # "OPEN_GRIPPER":   f"Step 1/8 – [{task_label}] Opening gripper ({self.arm_name} arm)...",
-                "MOVE_PREGRASP":  f"Step 1/7 – [{task_label}] Moving to PRE-GRASP...",
-                "MOVE_GRASP":     f"Step 2/7 – [{task_label}] Descending to GRASP...",
-                "PAUSE_AT_GRASP": f"Step 3/7 – [{task_label}] Holding at grasp for {PAUSE_AT_GRASP_SECS}s...",
-                "CLOSE_GRIPPER":  f"Step 4/7 – [{task_label}] Closing gripper (stall detection)...",
-                "MOVE_LIFT":      f"Step 5/7 – [{task_label}] LIFTING (to sleep pose)...",
-                "TWIST":          f"Step 6/7 – [{task_label}] TWISTING wrist 180° to unscrew (& lifting to sleep pose)...",
-                "DONE":           f"Step 7/7 – [{task_label}] Done!",
-            }
+        messages = {
+            "MOVE_PREGRASP":  f"[{task_label}] Moving to PRE-GRASP...",
+            "MOVE_GRASP":     f"[{task_label}] Descending to GRASP...",
+            "PAUSE_AT_GRASP": f"[{task_label}] Holding at grasp...",
+            "CLOSE_GRIPPER":  f"[{task_label}] Closing gripper...",
+            "MOVE_LIFT":      f"[{task_label}] LIFTING...",
+            "TWIST":          f"[{task_label}] TWISTING wrist 180°...",
+            "MOVE_POST_TWIST_LIFT": f"[{task_label}] Lifting cap to sleep pose...",
+            "MOVE_DEPOSIT":   f"[{task_label}] Moving to deposit...",
+            "OPEN_GRIPPER":   f"[{task_label}] Opening gripper...",
+            "DONE":           f"[{task_label}] Done!",
+        }
         self.get_logger().info(messages.get(self.state, f"State: {self.state}"))
 
     def _publish_status(self, reason: str):
@@ -686,19 +588,12 @@ class ManipulationExecutor(Node):
     # =====================================================================
     #  ARM COMMAND
     # =====================================================================
-
-    def _send_arm_to_pose(self, grasp_pose: Pose, z_offset: float = 0.0):
-        """
-        Send active arm to a target pose (with optional z offset).
-        1. If planner available: call /plan_to_target with execute=False (IK only)
-        2. Otherwise: use hardcoded IK fallback
-        Then publish joint positions as Float64MultiArray to /{arm}_arm/joint_cmd.
-        """
-        target_pose = copy.deepcopy(grasp_pose)
-        target_pose.position.z += z_offset
+    def _send_arm_to_pose(self, target_pose: Pose, z_offset: float = 0.0):
+        target_pose_copy = copy.deepcopy(target_pose)
+        target_pose_copy.position.z += z_offset
 
         if self.use_planner:
-            joint_targets = self._call_planner(target_pose)
+            joint_targets = self._call_planner(target_pose_copy)
             if joint_targets is None:
                 self.get_logger().error(
                     f"IK failed for z={target_pose.position.z:.3f}. "
@@ -709,7 +604,7 @@ class ManipulationExecutor(Node):
                 self._advance("IDLE")
                 return
         else:
-            joint_targets = self._hardcoded_ik(target_pose)
+            joint_targets = self._hardcoded_ik(target_pose_copy)
 
         # Store target for arrival tracking
         self.current_arm_target = list(joint_targets)
@@ -726,34 +621,21 @@ class ManipulationExecutor(Node):
         )
 
     def _call_planner(self, target_pose: Pose):
-        """
-        Call /plan_to_target with execute=False (IK only).
-        Returns list of 6 joint positions, or None on failure.
-        """
-        import time
-
-        state_label = {
-            "MOVE_PREGRASP": "pre-grasp",
-            "MOVE_GRASP": "grasp",
-            "MOVE_LIFT": "lift",
-        }.get(self.state, self.state)
-
         request = PlanToTarget.Request()
         request.arm_name = self.arm_name
         request.target_pose = target_pose
         request.use_orientation = True
-        request.execute = True  # Planner solves IK and publishes ArmCommand
+        request.execute = True
         request.duration = 5.0
         request.max_condition_number = 1000.0
 
         self.get_logger().info(
-            f"  Calling planner for {state_label}: "
+            f"  Calling planner: "
             f"({target_pose.position.x:.3f}, {target_pose.position.y:.3f}, "
             f"{target_pose.position.z:.3f})"
         )
 
         future = self.plan_client.call_async(request)
-
         timeout = 10.0
         start = time.time()
         while not future.done():
@@ -783,36 +665,20 @@ class ManipulationExecutor(Node):
         z = target_pose.position.z
         # Right arm waist points left (-π/2), left arm waist points right (+π/2)
         waist = -1.5708 if self.arm_name == "right" else 1.5708
-
-        if z > 0.20:
-            joints = [waist, -0.5, 0.3, 0.0, -0.8, 0.0]
-        elif z > 0.10:
-            joints = [waist, 0.2, 0.3, 0.0, -0.5, 0.0]
-        else:
-            joints = [waist, 0.5, 0.5, 0.0, -0.2, 0.0]
-
-        self.get_logger().warn(f"  Using HARDCODED IK for z={z:.3f} ({self.arm_name})")
-        return joints
+        if z > 0.20: return [waist, -0.5, 0.3, 0.0, -0.8, 0.0]
+        elif z > 0.10: return [waist, 0.2, 0.3, 0.0, -0.5, 0.0]
+        else: return [waist, 0.5, 0.5, 0.0, -0.2, 0.0]
 
     # =====================================================================
     #  CALLBACKS
     # =====================================================================
-
     def _arm_status_cb(self, msg: Int32):
-        """From brain node: 0=left, 1=right. Only switches arm when IDLE or DONE."""
-        if self.state not in ("IDLE", "DONE"):
-            return
-        old = self.arm_name
+        if self.state not in ("IDLE", "DONE"): return
         self.arm_name = "left" if msg.data == 0 else "right"
-        if self.arm_name != old:
-            self.get_logger().info(f"Arm switched: {old} → {self.arm_name}")
 
     def _task_status_cb(self, msg: Int32):
         """From brain node: 0=task1, 1=task3."""
         self.current_task = msg.data
-        self.get_logger().info(
-            f"Task set to: {'task3 (bottle+cap)' if msg.data == 1 else 'task1 (single arm)'}"
-        )
 
     def _grasp_pose_cb(self, msg: PoseStamped):
         """
@@ -837,33 +703,16 @@ class ManipulationExecutor(Node):
         Only acts when IDLE or DONE (so task3 can run a second arm).
         """
         command = msg.data.lower()
-      
-        if command not in ("grab", "deposit"):
-            self.get_logger().warn(f"Unknown manipulation goal: '{msg.data}'")
-            return
-          
-        if self.state not in ("IDLE", "DONE"):
-            self.get_logger().warn(f"Already executing — ignoring '{command}' command.")
-            return
-          
-        if command == "grab" and self.grasp_pose is None:
-            self.get_logger().warn("Got 'grab' but no grasp pose stored yet!")
-            return
-    
-        self.get_logger().info(
-            f"Brain sent '{command}' — starting state machine ({self.arm_name} arm)"
-        )
-    
-        if command == "grab":
-            self._advance("MOVE_PREGRASP")
-        elif command == "deposit":
-            self._advance("MOVE_DEPOSIT")
-          
+        if command not in ("grab", "deposit"): return
+        if self.state not in ("IDLE", "DONE"): return
+        if command == "grab" and self.grasp_pose is None: return
+        
+        if command == "grab": self._advance("MOVE_PREGRASP")
+        elif command == "deposit": self._advance("MOVE_DEPOSIT")
 
     def _publish_hardcoded_pose(self):
         """Publish a test pose (fires once after 3s startup delay)."""
         self.startup_timer.cancel()
-
         hardcoded = PoseStamped()
         hardcoded.header.stamp = self.get_clock().now().to_msg()
         hardcoded.header.frame_id = "base_link"
@@ -881,11 +730,9 @@ class ManipulationExecutor(Node):
         self.get_logger().info("Publishing hardcoded test pose...")
         self._grasp_pose_cb(hardcoded)
 
-
 # =============================================================================
 #  ENTRY POINT
 # =============================================================================
-
 def main(args=None):
     rclpy.init(args=args)
     node = ManipulationExecutor()
@@ -898,7 +745,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

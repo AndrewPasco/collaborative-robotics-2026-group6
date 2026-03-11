@@ -2,6 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import String
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2
 from sensor_msgs_py import point_cloud2
 import numpy as np
@@ -13,7 +14,7 @@ class DepthToPointCloudNode(Node):
         # Subscribe to the color camera info since the depth is aligned to the color frame
         self.info_sub = self.create_subscription(
             CameraInfo,
-            '/camera/color/camera_info',
+            '/camera/depth/camera_info',
             self.info_cb,
             10
         )
@@ -21,8 +22,22 @@ class DepthToPointCloudNode(Node):
         # Subscribe to the aligned depth image
         self.depth_sub = self.create_subscription(
             Image,
-            '/camera/aligned_depth_to_color/image_raw',
+            '/camera/depth/image_raw',
             self.depth_cb,
+            10
+        )
+
+        self.nav_msg_sub = self.create_subscription(
+            String,
+            '/brain/navigation_status',
+            self.start_cb,
+            10
+        )
+
+        self.manip_done_sub = self.create_subscription(
+            String,
+            'brain/manipulation_status',
+            self.end_cb,
             10
         )
         
@@ -34,6 +49,7 @@ class DepthToPointCloudNode(Node):
         )
 
         self.intrinsics = None
+        self.sending = False
         
         # We will cache the meshgrid to save computation time during callbacks
         self.u = None
@@ -52,7 +68,19 @@ class DepthToPointCloudNode(Node):
             # We only need the intrinsics once, so we can destroy the subscription to save bandwidth
             self.destroy_subscription(self.info_sub)
 
+    def start_cb(self, msg):
+        if msg.data == "grab":
+            self.sending = True
+
+    def end_cb(self, msg):
+        if msg.data == "done":
+            self.sending = False
+        
+
     def depth_cb(self, msg):
+        if not self.sending:
+            return
+        
         if self.intrinsics is None:
             return
 
