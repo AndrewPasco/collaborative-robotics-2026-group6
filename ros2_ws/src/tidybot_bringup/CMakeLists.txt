@@ -59,9 +59,4 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install Contact-GraspNet as a package directory
-install(DIRECTORY scripts/vision-manipulation/contact_graspnet/
-  DESTINATION lib/${PROJECT_NAME}/contact_graspnet
-)
-
 ament_package()
