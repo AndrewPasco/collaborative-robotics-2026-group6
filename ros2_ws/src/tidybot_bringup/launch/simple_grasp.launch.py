@@ -7,7 +7,7 @@ def launch_setup(context, *args, **kwargs):
     use_sim = LaunchConfiguration('use_sim').perform(context).lower() == 'false'
     depth_topic = "/camera/depth/image_raw" if use_sim else "/camera/aligned_depth_to_color/image_raw"
 
-    # 1. Point Cloud Generator
+    # # 1. Point Cloud Generator
     # cloud_node = Node(
     #     package="depth_image_proc",
     #     executable="point_cloud_xyzrgb_node",
@@ -28,7 +28,7 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         remappings=[
             ("camera_info", "/camera/depth/camera_info"),
-            ("image_rect", depth_topic),
+            ("image_rect", "/camera/depth/image_raw"),
             ("points", "/camera/points"),
         ],
     )
