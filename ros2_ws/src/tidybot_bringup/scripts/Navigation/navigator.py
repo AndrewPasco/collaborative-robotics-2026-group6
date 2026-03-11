@@ -6,6 +6,9 @@ navigator.py — ME 326 Navigator Node
 # 1. Start the simulation
 ros2 launch tidybot_bringup sim.launch.py scene:=scene_task2.xml use_rviz:=true show_mujoco_viewer:=true
 
+Optional Camera reset:
+ros2 topic pub --once /camera/pan_tilt_cmd std_msgs/msg/Float64MultiArray "{data: [0.0, 0.0]}"
+
 # 2. Run the Vision node
 ros2 run tidybot_bringup vision_yolo_gemini.py
 
@@ -14,6 +17,13 @@ ros2 run tidybot_bringup navigator.py
 
 # 4. Trigger the approach (this automatically targets the vision node and starts scanning)
 ros2 topic pub --once /brain/navigation_goal std_msgs/msg/String "{data: 'banana'}"
+
+
+Test rotation
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.2}}"
+
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}"
+
 """
 
 import rclpy
@@ -25,7 +35,7 @@ import math
 from geometry_msgs.msg import Twist, Point, Pose, Pose2D
 from std_msgs.msg import String, Bool, Float64MultiArray
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, RegionOfInterest
 
 
 # --- Camera Parameters ---
@@ -47,10 +57,10 @@ SCAN_ANGULAR_VEL   = 0.2  # rad/s while spinning
 SCAN_FULL_ROTATION = 2 * math.pi / SCAN_ANGULAR_VEL  # seconds for 360°
 
 # --- Coarse Centering & Approach ---
-APPROACH_LINEAR_VEL     = 0.2  # m/s max forward speed
+MAX_APPROACH_LINEAR_VEL     = 0.1  # m/s max forward speed
 CENTERING_SLOWDOWN_ZONE = 45   # pixels - Wait to align if error_x > this threshold
 CENTERING_DEADZONE      = 25   # pixels - Stop turning if |error_x| < this (prevents jitter)
-CENTERING_MIN_OMEGA     = 0.15 # rad/s - Physical limit for turning in place
+CENTERING_MIN_OMEGA     = 0.1 # rad/s - Physical limit for turning in place
 CENTERING_HOLD_TIME     = 2.0  # seconds - Stable centering before advancing
 TARGET_Y_OFFSET         = 50   # pixels - Distance from bottom of frame to stop
 
@@ -60,11 +70,11 @@ OVERSHOOT_RECOVER_VEL   = -0.15 # rad/s (counter-rotate) - Physical limit
 OVERSHOOT_RECOVER_DUR   = 1.5   # seconds
 
 # --- Fine Centering ---
-FINE_CENTERING_DEADZONE = 15  # pixels - Tighter deadzone for final alignment
+FINE_CENTERING_DEADZONE = 45  # pixels - Tighter deadzone for final alignment
 FINE_CENTERING_HOLD     = 2.0 # seconds - Must stay within deadzone before advancing
 
 # --- Final Approach ---
-FINAL_APPROACH_DIST = 0.5 # metres to drive blind after camera reset
+FINAL_APPROACH_DIST = 0.35 # metres to drive blind after camera reset
 FINAL_APPROACH_VEL  = 0.1 # m/s (slow final approach)
 
 # --- State Machine States ---
@@ -104,6 +114,7 @@ class Navigator(Node):
 
         # ── Object detection (from Vision node) ──
         self.latest_detection = None       # Point(x=px, y=py, z=area)
+        self.latest_bbox = None            # RegionOfInterest
         self.detection_stamp = 0.0
         self.detection_timeout = 5.0       # seconds — longer to survive manual testing gaps
 
@@ -175,6 +186,10 @@ class Navigator(Node):
         self.create_subscription(
             Point, '/object_detection',
             self.detection_cb, 10)
+        # Target BBox from Vision node
+        self.create_subscription(
+            RegionOfInterest, '/vision/target_bbox',
+            self.bbox_cb, 10)
 
         # ══════════ Control loop (10 Hz) ══════════
         self.timer = self.create_timer(0.1, self.control_loop)
@@ -283,9 +298,14 @@ class Navigator(Node):
             pass
 
     def detection_cb(self, msg: Point):
-        """Object detection from Vision node."""
+        """Object detection center from Vision node."""
         self.latest_detection = msg
         self.detection_stamp = time.time()
+
+    def bbox_cb(self, msg: RegionOfInterest):
+        """Object bounding box from Vision node."""
+        self.latest_bbox = msg
+        self.detection_stamp = time.time() 
 
     # ═══════════════════════════════════════════════════════════
     #  CONTROL LOOP (10 Hz)
@@ -424,7 +444,7 @@ class Navigator(Node):
                     self._approach_phase = 1
                     self._last_turn_sign = 0
                     self._align_center_start_time = None
-                    self.start_pause(STATE_APPROACHING, 5.0)
+                    self.start_pause(STATE_APPROACHING, pause_duration)
                     return
                 else:
                     # Within zone but waiting for timer — stop turning
@@ -452,11 +472,21 @@ class Navigator(Node):
         #  PHASE 1: ADVANCING — forward, with lateral steering
         # ─────────────────────────────────────────────
         if self._approach_phase == 1:
+            # Use bbox bottom if available; otherwise fallback to point center
+            if self.latest_bbox and self.latest_bbox.height > 0:
+                pixel_y = float(self.latest_bbox.y_offset + self.latest_bbox.height)
+                # Keep center X for lateral alignment
+                pixel_x = float(self.latest_bbox.x_offset + self.latest_bbox.width / 2.0)
+                error_x = IMAGE_CENTER_X - pixel_x
+                omega_raw = KP_ANGULAR * error_x
+            else:
+                pixel_y = det.y
+            
             # Object reached bottom of frame
             if pixel_y > IMAGE_HEIGHT - TARGET_Y_OFFSET:
                 pause_duration = 5.0
                 self.get_logger().info(
-                    f'APPROACH ph1: object at bottom (y={pixel_y:.0f}) — '
+                    f'APPROACH ph1: object bottom at frame bottom (y={pixel_y:.0f}) — '
                     f'pausing {pause_duration} s before FINE_CENTERING')
                 self.start_pause(STATE_FINE_CENTERING, pause_duration)
                 return
@@ -464,18 +494,16 @@ class Navigator(Node):
             target_y = IMAGE_HEIGHT - TARGET_Y_OFFSET
             error_y  = target_y - pixel_y
             v = KP_APPROACH_LINEAR * error_y
-            v = max(MIN_APPROACH_LINEAR_VEL, min(v, APPROACH_LINEAR_VEL))
+            v = max(MIN_APPROACH_LINEAR_VEL, min(v, MAX_APPROACH_LINEAR_VEL))
 
-            # Simultaneous lateral correction — if the object drifts sideways
-            # during the forward drive, steer gently to keep it centered.
-            # No minimum omega here as forward motion helps the turn.
+            # Simultaneous lateral correction
             omega = omega_raw
 
             _now = time.time()
             if _now - getattr(self, '_last_adv_log', 0) >= 0.5:
                 self._last_adv_log = _now
                 self.get_logger().info(
-                    f'APPROACH ph1: v={v:.3f} m/s, omega={omega:.3f}, pixel_y={pixel_y:.0f}, error_x={error_x:.1f}px')
+                    f'APPROACH ph1 (BBox Bottom): v={v:.3f} m/s, omega={omega:.3f}, pixel_y={pixel_y:.0f}, error_x={error_x:.1f}px')
 
             self.send_vel(v, omega)
             return

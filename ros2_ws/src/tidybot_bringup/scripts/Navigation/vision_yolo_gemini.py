@@ -5,21 +5,16 @@ vision_yolo_gemini.py — Enhanced Vision Node with YOLO + Gemini
 Combines fast local detection with flexible open-vocabulary queries:
   - YOLO: Fast object detection for known classes (runs every frame)
   - Gemini: Open-vocabulary detection for arbitrary queries (on demand)
+  - NOTE: Gemini functionality is currently UNTESTED.
 
 Publishes:
   /object_detection  (geometry_msgs/Point)  — x=pixel_x, y=pixel_y, z=bbox_area
   /vision/detections (std_msgs/String)      — JSON list of all detected objects
+  /vision/target_bbox (sensor_msgs/RegionOfInterest) — Best detection bbox
 
 Subscribes:
   /camera/color/image_raw  (sensor_msgs/Image)  — RGB from camera
   /vision/target           (std_msgs/String)    — What to find (e.g., "red cup", "toy")
-
-Setup:
-  1. pip install ultralytics google-generativeai opencv-contrib-python
-  2. Set GEMINI_API_KEY environment variable
-  3. chmod +x vision_yolo_gemini.py
-  4. Add to CMakeLists.txt
-  5. colcon build --packages-select tidybot_bringup
 """
 
 import rclpy
@@ -40,21 +35,15 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import RegionOfInterest
 
 # --- Navigator Constants (imported for visualization) ---
-try:
-    from navigator import (
-        IMAGE_CENTER_X, 
-        CENTERING_SLOWDOWN_ZONE, 
-        CENTERING_DEADZONE, 
-        FINE_CENTERING_DEADZONE,
-        TARGET_Y_OFFSET
-    )
-except ImportError:
-    # Fallback if navigator.py is not in path
-    IMAGE_CENTER_X = 320.0
-    CENTERING_SLOWDOWN_ZONE = 45
-    CENTERING_DEADZONE = 25
-    FINE_CENTERING_DEADZONE = 15
-    TARGET_Y_OFFSET = 50
+from navigator import (
+    IMAGE_CENTER_X, 
+    CENTERING_SLOWDOWN_ZONE, 
+    CENTERING_DEADZONE, 
+    FINE_CENTERING_DEADZONE,
+    TARGET_Y_OFFSET
+)
+
+
 
 
 # ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
@@ -90,7 +79,11 @@ class VisionYoloGemini(Node):
     def __init__(self):
         super().__init__('vision_yolo_gemini')
         self.get_logger().info('Vision (YOLO+Gemini) node starting...')
-
+        self.get_logger().info(f'IMAGE_CENTER_X: {IMAGE_CENTER_X}')
+        self.get_logger().info(f'CENTERING_SLOWDOWN_ZONE: {CENTERING_SLOWDOWN_ZONE}')
+        self.get_logger().info(f'CENTERING_DEADZONE: {CENTERING_DEADZONE}')
+        self.get_logger().info(f'FINE_CENTERING_DEADZONE: {FINE_CENTERING_DEADZONE}')
+        self.get_logger().info(f'TARGET_Y_OFFSET: {TARGET_Y_OFFSET}')
         # ── Target to find ──
         self.target_query = None  # e.g., "red cup", "toy dinosaur"
         self.target_class = None  # YOLO class name if applicable
@@ -458,7 +451,7 @@ Image dimensions are 640x480. Give pixel coordinates."""
             # Log when we publish a detection (once per second max)
             import time as _t
             _now = _t.time()
-            if _now - getattr(self, '_last_det_log', 0) >= 0.1:
+            if _now - getattr(self, '_last_det_log', 0) >= 15.0:
                 self._last_det_log = _now
                 self.get_logger().info(
                     f'Published detection: {best.get("class","?")} '

@@ -98,8 +98,8 @@ def generate_launch_description():
 
     manipulation = Node(
         package='tidybot_bringup',
-        # executable='manipulation_node.py',             # <-- Switch to this for full IK/Grasping node
-        executable='manipulation_node_placeholder.py',    # <-- Using placeholder for now
+        # executable='manipulation_node.py',             
+        executable='manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
         # parameters=[{'use_sim_time': True}]

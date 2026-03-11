@@ -144,7 +144,7 @@ def generate_launch_description():
         sim_launch,
         # Brain layer
         # microphone,
-        # speech,
+        speech,
         navigation,
         vision,
         manipulation,
