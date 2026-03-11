@@ -18,18 +18,25 @@ Launches the FULL system for Task 2: Sequential Pick-and-Place.
 Usage:
 ros2 launch tidybot_bringup brain_task2.launch.py show_mujoco_viewer:=true use_rviz:=true
 
+rviz:
+rviz2 -d /home/mete/collaborative-robotics-2026-group6/ros2_ws/src/tidybot_bringup/rviz/tidybot.rviz
+
 Without sim:
 ros2 launch tidybot_bringup brain_task2.launch.py use_sim:=false
 
 Start task:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
+
 Test audio:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio_sequential ~/collaborative-robotics-2026-group6/examples/banana_bowl.wav'}"
+
+Skip speech:
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'bypass banana bowl'}"
 """
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, Shutdown
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -100,8 +107,8 @@ def generate_launch_description():
 
     manipulation = Node(
         package='tidybot_bringup',
-        # executable='manipulation_node.py',             
-        executable='manipulation_node_placeholder.py',
+        executable='manipulation_node.py',             
+        # executable='manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
         # parameters=[{'use_sim_time': True}]
@@ -133,6 +140,51 @@ def generate_launch_description():
         name='brain_node_task2',
         output='screen',
         # parameters=[{'use_sim_time': True}]
+    )
+
+    # point_cloud = Node(
+    #     package='tidybot_bringup',
+    #     executable='point_cloud_node.py',
+    #     name='point_cloud_node',
+    #     output='screen',
+    #     condition=UnlessCondition(LaunchConfiguration('use_sim')),
+    #     on_exit=Shutdown(),
+    # )
+
+    # depth_topic = '/camera/aligned_depth_to_color/image_raw'
+    # point_cloud = Node(
+    #     package="depth_image_proc",
+    #     executable="point_cloud_xyzrgb_node",
+    #     name="depth_to_cloud",
+    #     output="screen",
+    #     remappings=[
+    #         ("rgb/camera_info", "/camera/color/camera_info"),
+    #         ("rgb/image_rect_color", "/camera/color/image_raw"),
+    #         ("depth_registered/image_rect", depth_topic),
+    #         ("points", "/camera/points"),
+    #     ],
+    # )
+
+    point_cloud = Node(
+        package="depth_image_proc",
+        executable="point_cloud_xyz_node",
+        name="depth_to_cloud",
+        output="screen",
+        arguments=['--ros-args', '--log-level', 'FATAL'],
+        remappings=[
+            ("camera_info", "/camera/depth/camera_info"),
+            ("image_rect", "/camera/depth/image_raw"),
+            ("points", "/camera/points"),
+        ],
+    )
+
+    grasp_planner = Node(
+        package='tidybot_bringup',
+        executable='simple_grasp_planner_node.py',
+        name='simple_grasp_planner_node',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
     )
 
     # ── Real-robot compatibility: arm_controller_node ────────────────

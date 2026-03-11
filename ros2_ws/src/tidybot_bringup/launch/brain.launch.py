@@ -15,19 +15,33 @@ Launches the FULL system in one command:
    - brain_node        (state machine orchestrator) 
 
 Usage:
-ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true
+ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true camera_rate:=4.0
 Without sim:
+
 ros2 launch tidybot_bringup real.launch.py use_lidar:=false
+
+rviz:
+rviz2 -d /home/mete/collaborative-robotics-2026-group6/ros2_ws/src/tidybot_bringup/rviz/tidybot.rviz
+
 ros2 launch tidybot_bringup brain.launch.py use_sim:=false
 
+
+Run with mic:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
-Test audio:
+
+Run with test audio:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio ~/collaborative-robotics-2026-group6/examples/banana.wav'}"
+
+Manual grab pub:
+ros2 topic pub --once /brain/manipulation_goal std_msgs/msg/String "{data: 'grab'}"
+
+Skip speech:
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'bypass banana'}"
 """
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, Shutdown
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -85,6 +99,7 @@ def generate_launch_description():
         executable='speech_node.py',
         name='speech_node',
         output='screen',
+        on_exit=Shutdown(),
     )
 
     navigation = Node(
@@ -92,6 +107,7 @@ def generate_launch_description():
         executable='navigator.py',
         name='navigation_node',
         output='screen',
+        on_exit=Shutdown(),
     )
 
     manipulation = Node(
@@ -100,13 +116,7 @@ def generate_launch_description():
         # executable = 'manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
-    )
-
-    brain = Node(
-        package='tidybot_bringup',
-        executable='brain_node_task1.py',
-        name='brain_node',
-        output='screen',
+        on_exit=Shutdown(),
     )
 
     vision = Node(
@@ -114,8 +124,10 @@ def generate_launch_description():
         executable='vision_yolo_gemini.py',
         name='vision_node',
         output='screen',
+        on_exit=Shutdown(),
     )
 
+<<<<<<< HEAD
     # point_cloud = Node(
     #     package='tidybot_bringup',
     #     executable='point_cloud_node.py',
@@ -132,7 +144,46 @@ def generate_launch_description():
             # We intentionally leave this empty! 
             # The brain node will dynamically load point_cloud_xyz here.
         ],
+=======
+    brain = Node(
+        package='tidybot_bringup',
+        executable='brain_node_task1.py',
+        name='brain_node',
+>>>>>>> 8e76ed8 (task 2 last day changes)
         output='screen',
+        on_exit=Shutdown(),
+    )
+
+    # point_cloud = Node(
+    #     package='tidybot_bringup',
+    #     executable='point_cloud_node.py',
+    #     name='point_cloud_node',
+    #     output='screen',
+    #     condition=UnlessCondition(LaunchConfiguration('use_sim')),
+    #     on_exit=Shutdown(),
+    # )
+
+    # depth_topic = '/camera/aligned_depth_to_color/image_raw'
+    point_cloud = Node(
+        package="depth_image_proc",
+        executable="point_cloud_xyz_node",
+        name="depth_to_cloud",
+        output="screen",
+        
+        remappings=[
+            ("camera_info", "/camera/color/camera_info"),
+            ("image_rect", "/camera/depth/image_raw"),
+            ("points", "/camera/points"),
+        ],
+    )
+
+    grasp_planner = Node(
+        package='tidybot_bringup',
+        executable='simple_grasp_planner_node.py',
+        name='simple_grasp_planner_node',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
     )
 
     # ── Real-robot compatibility: arm_controller_node ────────────────
@@ -144,7 +195,8 @@ def generate_launch_description():
         name='right_arm_controller',
         output='screen',
         condition=UnlessCondition(LaunchConfiguration('use_sim')),
-        parameters=[{'arm_name': 'right', 'control_rate': 50.0}]
+        parameters=[{'arm_name': 'right', 'control_rate': 50.0}],
+        on_exit=Shutdown(),
     )
 
     left_arm_controller = Node(
@@ -153,7 +205,8 @@ def generate_launch_description():
         name='left_arm_controller',
         output='screen',
         condition=UnlessCondition(LaunchConfiguration('use_sim')),
-        parameters=[{'arm_name': 'left', 'control_rate': 50.0}]
+        parameters=[{'arm_name': 'left', 'control_rate': 50.0}],
+        on_exit=Shutdown(),
     )
 
     return LaunchDescription([
@@ -171,7 +224,8 @@ def generate_launch_description():
         # point_cloud,
         pc_container,
         manipulation,
-        right_arm_controller,
-        left_arm_controller,
+        grasp_planner,
+        # right_arm_controller,
+        # left_arm_controller,
         brain,
     ])
