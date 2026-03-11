@@ -8,30 +8,30 @@ def launch_setup(context, *args, **kwargs):
     depth_topic = "/camera/depth/image_raw" if use_sim else "/camera/aligned_depth_to_color/image_raw"
 
     # 1. Point Cloud Generator
-    cloud_node = Node(
-        package="depth_image_proc",
-        executable="point_cloud_xyzrgb_node",
-        name="depth_to_cloud",
-        output="screen",
-        remappings=[
-            ("rgb/camera_info", "/camera/color/camera_info"),
-            ("rgb/image_rect_color", "/camera/color/image_raw"),
-            ("depth_registered/image_rect", depth_topic),
-            ("points", "/camera/points"),
-        ],
-    )
-
     # cloud_node = Node(
     #     package="depth_image_proc",
-    #     executable="point_cloud_xyz_node",
+    #     executable="point_cloud_xyzrgb_node",
     #     name="depth_to_cloud",
     #     output="screen",
     #     remappings=[
-    #         ("camera_info", "/camera/depth/camera_info"),
-    #         ("image_rect", depth_topic),
+    #         ("rgb/camera_info", "/camera/color/camera_info"),
+    #         ("rgb/image_rect_color", "/camera/color/image_raw"),
+    #         ("depth_registered/image_rect", depth_topic),
     #         ("points", "/camera/points"),
     #     ],
     # )
+
+    cloud_node = Node(
+        package="depth_image_proc",
+        executable="point_cloud_xyz_node",
+        name="depth_to_cloud",
+        output="screen",
+        remappings=[
+            ("camera_info", "/camera/depth/camera_info"),
+            ("image_rect", depth_topic),
+            ("points", "/camera/points"),
+        ],
+    )
 
     # 2. Simple Grasp Planner
     simple_node = Node(

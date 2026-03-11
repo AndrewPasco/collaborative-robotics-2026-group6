@@ -85,7 +85,7 @@ PREGRASP_X_OFFSET = 0.08
 LIFT_HEIGHT = 0.15
 
 SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
-FORWARD_POSE = [0.0, -0.5, 0.5, 0.0, 0.0, 0.0]
+FORWARD_POSE = [0.5, -0.5, 0.5, 0.0, 0.0, 0.0]
 
 # Joint state feedback thresholds
 ARM_ARRIVAL_TOLERANCE = 0.05

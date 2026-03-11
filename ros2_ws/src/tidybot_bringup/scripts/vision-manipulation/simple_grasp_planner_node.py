@@ -58,8 +58,8 @@ class SimpleGraspPlannerNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("table_height_buffer", 0.01)  # 1cm above table is object
         self.declare_parameter("grasp_type", "top")          # "top" or "side"
-        self.declare_parameter("depth_adjust", 0.06)        # how much to set gripper position back
-        self.declare_parameter("height_adjust", 0.06)       # how much to raise gripper pose above object
+        self.declare_parameter("depth_adjust", 0.00)        # how much to set gripper position back
+        self.declare_parameter("height_adjust", 0.04)       # how much to raise gripper pose above object
         self.declare_parameter("send_plan_request", False)   # Option to call planner directly
         
         self.base_frame = self.get_parameter("base_frame").value

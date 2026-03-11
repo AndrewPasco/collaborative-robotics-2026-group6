@@ -78,8 +78,8 @@ class DepthToPointCloudNode(Node):
         
 
     def depth_cb(self, msg):
-        if not self.sending:
-            return
+        # if not self.sending:
+        #     return
         
         if self.intrinsics is None:
             return
@@ -101,7 +101,7 @@ class DepthToPointCloudNode(Node):
         z = depth_image.flatten()
 
         # Filter out 0-depth values (invalid pixels) to dramatically reduce point cloud size
-        valid_mask = z > 0
+        valid_mask = (z > 0) & (z < 1000)
         z_valid = z[valid_mask]
         u_valid = self.u[valid_mask]
         v_valid = self.v[valid_mask]

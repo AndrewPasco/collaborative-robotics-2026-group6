@@ -237,7 +237,7 @@ def launch_setup(context, *args, **kwargs):
                 'base_frame_id': 'link',
                 'enable_color': True,
                 'enable_depth': True,
-                'align_depth.enable': True,
+                # 'align_depth.enable': True,
                 'enable_infra1': False,
                 'enable_infra2': False,
                 'publish_tf': True,
