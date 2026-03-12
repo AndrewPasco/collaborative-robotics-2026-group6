@@ -324,15 +324,11 @@ class BrainNode(Node):
 
         # --- C: Grab -----------------------------------------------
         elif self.state == BrainState.GRABBING:
-<<<<<<< Updated upstream
-            if not self.goal_sent:               
-=======
             if not self.goal_sent:
                 if elapsed < 1.0:
                     if int(elapsed * 10) % 2 == 0:  # Log every 2 seconds roughly
                         self.get_logger().info(f'  Pausing before GRAB... {1.0 - elapsed:.1f}s remaining')
                     return
->>>>>>> Stashed changes
                 self.get_logger().info('--- C: GRAB OBJECT ---')
                 self.get_logger().info('Sending grab command')
                 self._pub(self.manip_goal_pub, 'grab')

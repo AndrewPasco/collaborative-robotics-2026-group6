@@ -108,6 +108,10 @@ class Navigator(Node):
         super().__init__('navigator')
         self.get_logger().info('Navigator node starting...')
 
+        # ── Parameters ──
+        self.declare_parameter('use_sim', True)
+        self.use_sim = self.get_parameter('use_sim').value
+
         # ── State machine ──
         self.state = STATE_IDLE
         self.scan_start_time = None
@@ -126,6 +130,7 @@ class Navigator(Node):
         self.start_y = 0.0
         self.start_theta = 0.0
         self.home_saved = False
+        self._first_msg_time = None
 
         # ── Fine-centering state ──
         self._fine_center_start = None  # time when we first became centred
@@ -261,12 +266,17 @@ class Navigator(Node):
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self.odom_theta = math.atan2(siny_cosp, cosy_cosp)
         
+        self.odom_theta = self._wrap(self.odom_theta - math.pi/2)
         if not self.home_saved:
-            self.start_x = self.odom_x
-            self.start_y = self.odom_y
-            self.start_theta = self.odom_theta
-            self.home_saved = True
-            self.get_logger().info(f'Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
+            now = time.time()
+            if self._first_msg_time is None:
+                self._first_msg_time = now
+            elif (now - self._first_msg_time) > 1.0:
+                self.start_x = self.odom_x
+                self.start_y = self.odom_y
+                self.start_theta = self.odom_theta
+                self.home_saved = True
+                self.get_logger().info(f'(SIM ODOM) Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
 
     def goal_reached_cb(self, msg: Bool):
         if msg.data:
@@ -292,13 +302,21 @@ class Navigator(Node):
             
                 # The base_th published to /odom receives a +pi/2 offset inside mujoco_bridge_node.py.
                 self.odom_theta = self._wrap(positions[idx_th] + math.pi/2)
+                self.get_logger().info(f'use_sim={self.use_sim}')
+                if self.use_sim:
+                    self.odom_theta = self._wrap(positions[idx_th])
+                    self.get_logger().info(f'Using sim: odom_theta={self.odom_theta:.3f}')
                 
                 if not self.home_saved:
-                    self.start_x = self.odom_x
-                    self.start_y = self.odom_y
-                    self.start_theta = self.odom_theta
-                    self.home_saved = True
-                    self.get_logger().info(f'Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
+                    now = time.time()
+                    if self._first_msg_time is None:
+                        self._first_msg_time = now
+                    elif (now - self._first_msg_time) > 1.0:
+                        self.start_x = self.odom_x
+                        self.start_y = self.odom_y
+                        self.start_theta = self.odom_theta
+                        self.home_saved = True
+                        self.get_logger().info(f'Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
         except (ValueError, IndexError):
             pass
 
@@ -628,8 +646,10 @@ class Navigator(Node):
 
         if self._cam_reset_phase == 0:
             # Send tilt down
-            # self._pub_pan_tilt(0.0, -0.6)
-            self.get_logger().info('Camera: tilting up (-0.6)')
+            if self.use_sim:
+                self._pub_pan_tilt(0.0, -0.6)
+                self.get_logger().info('Camera: tilting up (-0.6) - Sim Only')
+            
             self._cam_reset_phase = 1
             self._cam_reset_phase_t = now
 
@@ -696,6 +716,16 @@ class Navigator(Node):
         angle_to_start = math.atan2(dy, dx)
         heading_error = self._wrap(angle_to_start - self.odom_theta)
         
+        # Periodic debug log
+        now = time.time()
+        if now - getattr(self, '_last_return_log', 0) >= 1.0:
+            self._last_return_log = now
+            self.get_logger().info(
+                f'RETURN [Ph {self.return_phase}]: dist={distance:.3f}m, '
+                f'odom_theta={math.degrees(self.odom_theta):.1f}°, '
+                f'error={math.degrees(heading_error):.1f}°'
+            )
+
         if self.return_phase == 0:
             if distance < 0.2:
                 # Already close enough, skip to phase 2

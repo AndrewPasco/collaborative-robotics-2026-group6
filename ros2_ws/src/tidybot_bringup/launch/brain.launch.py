@@ -15,7 +15,7 @@ Launches the FULL system in one command:
    - brain_node        (state machine orchestrator) 
 
 Usage:
-ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true camera_rate:=4.0
+ros2 launch tidybot_bringup brain.launch.py scene:=scene_task2.xml show_mujoco_viewer:=true use_rviz:=true
 Without sim:
 
 ros2 launch tidybot_bringup real.launch.py use_lidar:=false
@@ -107,15 +107,25 @@ def generate_launch_description():
         executable='navigator.py',
         name='navigation_node',
         output='screen',
+        parameters=[{'use_sim': LaunchConfiguration('use_sim')}],
         on_exit=Shutdown(),
     )
 
+    manipulation_placeholder = Node(
+        package='tidybot_bringup',
+        # executable='manipulation_node.py',
+        executable = 'manipulation_node_placeholder.py',
+        name='manipulation_node',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
+    )
     manipulation = Node(
         package='tidybot_bringup',
         executable='manipulation_node.py',
-        # executable = 'manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
         on_exit=Shutdown(),
     )
 
@@ -127,29 +137,10 @@ def generate_launch_description():
         on_exit=Shutdown(),
     )
 
-<<<<<<< HEAD
-    # point_cloud = Node(
-    #     package='tidybot_bringup',
-    #     executable='point_cloud_node.py',
-    #     name='point_cloud_node',
-    #     output='screen',
-    # )
-
-    pc_container = ComposableNodeContainer(
-        name='vision_container',
-        namespace='',
-        package='rclcpp_components',
-        executable='component_container',
-        composable_node_descriptions=[
-            # We intentionally leave this empty! 
-            # The brain node will dynamically load point_cloud_xyz here.
-        ],
-=======
     brain = Node(
         package='tidybot_bringup',
         executable='brain_node_task1.py',
         name='brain_node',
->>>>>>> 8e76ed8 (task 2 last day changes)
         output='screen',
         on_exit=Shutdown(),
     )
@@ -169,7 +160,7 @@ def generate_launch_description():
         executable="point_cloud_xyz_node",
         name="depth_to_cloud",
         output="screen",
-        
+        arguments=['--ros-args', '--log-level', 'FATAL'],
         remappings=[
             ("camera_info", "/camera/color/camera_info"),
             ("image_rect", "/camera/depth/image_raw"),
@@ -222,8 +213,9 @@ def generate_launch_description():
         navigation,
         vision,
         # point_cloud,
-        pc_container,
+        # pc_container,
         manipulation,
+        manipulation_placeholder,
         grasp_planner,
         # right_arm_controller,
         # left_arm_controller,

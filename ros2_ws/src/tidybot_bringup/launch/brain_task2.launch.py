@@ -102,16 +102,26 @@ def generate_launch_description():
         executable='navigator.py',
         name='navigation_node',
         output='screen',
+        parameters=[{'use_sim': LaunchConfiguration('use_sim')}]
         # parameters=[{'use_sim_time': True}]
     )
 
-    manipulation = Node(
+    manipulation_placeholder = Node(
         package='tidybot_bringup',
-        executable='manipulation_node.py',             
-        # executable='manipulation_node_placeholder.py',
+        # executable='manipulation_node.py',
+        executable = 'manipulation_node_placeholder.py',
         name='manipulation_node',
         output='screen',
-        # parameters=[{'use_sim_time': True}]
+        condition=IfCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
+    )
+    manipulation = Node(
+        package='tidybot_bringup',
+        executable='manipulation_node.py',
+        name='manipulation_node',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
     )
 
     pc_container = ComposableNodeContainer(
@@ -139,6 +149,7 @@ def generate_launch_description():
         executable='brain_node_task2.py',
         name='brain_node_task2',
         output='screen',
+        parameters=[{'use_sim': LaunchConfiguration('use_sim')}]
         # parameters=[{'use_sim_time': True}]
     )
 
@@ -221,6 +232,7 @@ def generate_launch_description():
         navigation,
         vision,
         manipulation,
+        manipulation_placeholder,
         pc_container,
         right_arm_controller,
         left_arm_controller,

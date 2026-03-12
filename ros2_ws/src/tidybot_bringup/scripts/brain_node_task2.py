@@ -98,6 +98,10 @@ class BrainNodeTask2(Node):
         self.nav_retries = 0
         self.max_nav_retries = 3
 
+        # ── Parameters ──
+        self.declare_parameter('use_sim', True)
+        self.use_sim = self.get_parameter('use_sim').value
+
         # Service clients to dynamically load/unload vision processing
         self.load_client = self.create_client(LoadNode, '/vision_container/_container/load_node')
         self.unload_client = self.create_client(UnloadNode, '/vision_container/_container/unload_node')
@@ -364,6 +368,11 @@ class BrainNodeTask2(Node):
 
         # --- B.5: Observe (Point Cloud processing) -----------------
         elif self.state == BrainState.OBSERVING:
+            if self.use_sim:
+                self.get_logger().info('--- B.5: OBSERVING PAYLOAD (SIM BYPASS) ---')
+                self._transition(BrainState.GRABBING)
+                return
+
             if not self.goal_sent:
                 self.get_logger().info(f'--- B.5: OBSERVING PAYLOAD "{self.payload}" ---')
                 self.latest_grasp_pose = None
