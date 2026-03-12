@@ -249,7 +249,12 @@ class BrainNode(Node):
             # Simulation confirmed running and start command received
             self.get_logger().info(f'[OK] MuJoCo running. Executing command "{self.start_command}"...')
             self._set_camera_pan_tilt(0.0, 0.0)
-            self._transition(BrainState.WAITING_FOR_COMMAND)
+
+            if self.start_command.startswith('bypass '):
+                self.target_item = self.start_command.split(' ', 1)[1].strip()
+                self._transition(BrainState.NAVIGATING)
+            else:
+                self._transition(BrainState.WAITING_FOR_COMMAND)
 
         # --- A: tell speech_node to listen -------------------------
         elif self.state == BrainState.WAITING_FOR_COMMAND:
@@ -319,8 +324,17 @@ class BrainNode(Node):
 
         # --- C: Grab -----------------------------------------------
         elif self.state == BrainState.GRABBING:
+<<<<<<< Updated upstream
             if not self.goal_sent:               
+=======
+            if not self.goal_sent:
+                if elapsed < 1.0:
+                    if int(elapsed * 10) % 2 == 0:  # Log every 2 seconds roughly
+                        self.get_logger().info(f'  Pausing before GRAB... {1.0 - elapsed:.1f}s remaining')
+                    return
+>>>>>>> Stashed changes
                 self.get_logger().info('--- C: GRAB OBJECT ---')
+                self.get_logger().info('Sending grab command')
                 self._pub(self.manip_goal_pub, 'grab')
                 self.goal_sent = True
 

@@ -150,14 +150,15 @@ class ItemExtractorBase:
                 language_code="en-US",
                 enable_automatic_punctuation=True,
             )
-
+            self.log(" asdfsdfdsdfsd")
             response = self.speech_client.recognize(config=config, audio=audio)
-
+            self.log("after response")
             if not response.results:
                 return ""
             
             # Extract transcript from the first alternative of the first result
             transcript = response.results[0].alternatives[0].transcript
+            self.log("transcript")
             return transcript
         except Exception as e:
             self.log(f"STT Error: {str(e)}")

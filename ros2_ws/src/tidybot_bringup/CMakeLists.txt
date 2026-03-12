@@ -42,6 +42,7 @@ install(PROGRAMS
   scripts/audio_item_detector.py
   scripts/brain_node_task1.py
   scripts/brain_node_task2.py
+  scripts/brain_node_task3.py
   scripts/navigation_node.py
   scripts/manipulation_node_placeholder.py
   scripts/speech_node.py
@@ -56,6 +57,7 @@ install(PROGRAMS
   scripts/vision-manipulation/contact_graspnet_node.py
   scripts/vision-manipulation/simple_grasp_planner_node.py
   scripts/vision-manipulation/point_cloud_node.py
+  scripts/vision_segmentation/segment_task3.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

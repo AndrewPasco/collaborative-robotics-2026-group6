@@ -1,66 +1,60 @@
 #!/usr/bin/env python3
 """
-TidyBot2 Brain Node — Task 2: Sequential Task
+TidyBot2 Brain Node — Task 3: Liquid Pouring
 
-Orchestrator for the sequential pick-and-place task:
-  "Find the <payload> and place it in the <destination>"
+Orchestrator for the liquid pouring task:
+  "Locate the bottle and pour the liquid."
 
-Differences from Task 1 brain_node.py:
-  - Sends 'listen_sequential' to speech_node (expects JSON result)
-  - Parses JSON result with 'payload' and 'destination' fields
-  - Two navigation targets: NAV_TO_PAYLOAD → observe → grab → NAV_TO_BIN → deposit → return
-  - Uses 'deposit' manipulation command instead of 'release'
-  - 1.5s settling buffer after NAV_TO_BIN
-  - Dynamically loads/unloads point cloud processing to save CPU.
+Differences from Task 1 and 2:
+  - Navigation leg: Only 1 (navigate to the bottle).
+  - Manipulation: Two grabs in sequence (left arm grabs body, right arm grabs lid, untwists, pours).
+  - Uses '/arm_status' and '/task_status' to trigger segmentation via 'segment_task3.py'.
 
 States:
   IDLE                → Waiting for MuJoCo + user command
-  WAITING_FOR_COMMAND → Sending 'listen_sequential' to speech_node
+  WAITING_FOR_COMMAND → Sending 'listen' to speech_node
   LISTENING           → Waiting for JSON speech result
-  NAV_TO_PAYLOAD      → Navigating to the payload object
-  OBSERVING           → Starting vision, waiting for grasp pose, stopping vision
-  GRABBING            → Waiting for manipulation grab
-  NAV_TO_BIN          → Navigating to the destination bin
-  DEPOSITING          → Waiting for manipulation deposit
-  RETURNING           → Navigating back to start
+  NAV_TO_BOTTLE       → Navigating to the bottle
+  SEGMENT_BODY        → Signal vision to segment bottle body (red cube)
+  GRAB_BODY           → Left arm grabs the body
+  SEGMENT_LID         → Signal vision to segment bottle lid (yellow cube)
+  GRAB_LID_UNTWIST_POUR → Right arm grabs lid, twists, pours
   COMPLETED           → Task done, auto-reset
 
 """
 
 import json
 import time
-import threading
 from enum import Enum, auto
 
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from std_msgs.msg import String, Int32, Float64MultiArray
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import PoseStamped
 from composition_interfaces.srv import LoadNode, UnloadNode
 
 
 # ── States ──────────────────────────────────────────────────────────
 
 class BrainState(Enum):
-    IDLE                = auto()   # Waiting for user input to start
-    WAITING_FOR_COMMAND = auto()   # A — tell speech_node to listen (sequential)
-    LISTENING           = auto()   # A — waiting for speech_node JSON result
-    NAV_TO_PAYLOAD      = auto()   # B — navigate to the payload object
-    OBSERVING           = auto()   # B.5 — Vision processing for payload
-    GRABBING            = auto()   # C — grab the payload
-    NAV_TO_BIN          = auto()   # D — navigate to the destination bin
-    DEPOSITING          = auto()   # E — deposit payload into bin
-    RETURNING           = auto()   # F — navigate back to start
-    COMPLETED           = auto()
+    IDLE                  = auto()   # Waiting for user input to start
+    WAITING_FOR_COMMAND   = auto()   # A — tell speech_node to listen
+    LISTENING             = auto()   # A — waiting for speech_node JSON result
+    NAV_TO_BOTTLE         = auto()   # B — navigate to the bottle
+    SEGMENT_BODY          = auto()   # C — trigger body segmentation
+    GRAB_BODY             = auto()   # D — grab the body (left arm)
+    SEGMENT_LID           = auto()   # E — trigger lid segmentation
+    GRAB_LID_UNTWIST_POUR = auto()   # F — untwist and pour (right arm)
+    COMPLETED             = auto()
 
 
 # ── Node ────────────────────────────────────────────────────────────
 
-class BrainNodeTask2(Node):
+class BrainNodeTask3(Node):
 
     def __init__(self):
-        super().__init__('brain_node_task2')
+        super().__init__('brain_node_task3')
 
         # ── Pub/Sub ─────────────────────────────────────────────────
         self.speech_goal_pub = self.create_publisher(String, '/brain/speech_goal',       10)
@@ -74,12 +68,10 @@ class BrainNodeTask2(Node):
         self.speech_result = None
         self.nav_status    = 'idle'
         self.manip_status  = 'idle'
-        self.latest_grasp_pose = None
 
         self.create_subscription(String, '/brain/speech_result',        self._speech_cb, 10)
         self.create_subscription(String, '/brain/navigation_status',    self._nav_cb,    10)
         self.create_subscription(String, '/brain/manipulation_status',  self._manip_cb,  10)
-        self.create_subscription(PoseStamped, '/detected_grasps/pose', self._grasp_cb, 10)
 
         # Check if MuJoCo is running
         self.mujoco_ready = False
@@ -91,8 +83,7 @@ class BrainNodeTask2(Node):
 
         # ── State machine ───────────────────────────────────────────
         self.state = BrainState.IDLE
-        self.payload: str | None = None         # e.g. "banana"
-        self.destination: str | None = None     # e.g. "bowl"
+        self.target_item: str | None = None
         self.goal_sent = False
         self.state_start_time = time.time()
         self.nav_retries = 0
@@ -103,13 +94,18 @@ class BrainNodeTask2(Node):
         self.unload_client = self.create_client(UnloadNode, '/vision_container/_container/unload_node')
         self.pc_node_id = None
 
+        # Async param client to configure the grasp planner at runtime
+        # self.grasp_param_client = rclpy.parameter.AsyncParametersClient(
+        #     self, 'simple_grasp_planner'
+        # )
+
         # -- Startup delay then control loop -------------------------
         self.get_logger().info('  Waiting 5s for other nodes to start ...')
         self.create_timer(5.0, self._start_control_loop, callback_group=None)
         self.control_timer = None
 
         self.get_logger().info('=' * 55)
-        self.get_logger().info('  Brain Node Task 2 (Sequential) ready')
+        self.get_logger().info('  Brain Node Task 3 (Liquid Pouring) ready')
         self.get_logger().info('=' * 55)
 
     def _start_control_loop(self):
@@ -118,13 +114,9 @@ class BrainNodeTask2(Node):
             return
         self.get_logger().info('Starting control loop.')
         
-        # Initialize manipulation status for the real robot node
-        arm_msg = Int32()
-        arm_msg.data = 1  # 1 = right arm
-        self.arm_status_pub.publish(arm_msg)
-        
+        # Initialize task status for task 3
         task_msg = Int32()
-        task_msg.data = 0  # 0 = task 1 or 2
+        task_msg.data = 1  # 1 = task 3
         self.task_status_pub.publish(task_msg)
 
         # Set camera to look at 0 0
@@ -132,7 +124,6 @@ class BrainNodeTask2(Node):
 
         self.state_start_time = time.time()
         self.control_timer = self.create_timer(1.0, self._control_loop)
-
 
     # -- Callbacks ---------------------------------------------------
 
@@ -151,10 +142,6 @@ class BrainNodeTask2(Node):
 
     def _joint_state_cb(self, msg: JointState):
         self.mujoco_ready = True
-
-    def _grasp_cb(self, msg: PoseStamped):
-        if self.state == BrainState.OBSERVING:
-            self.latest_grasp_pose = msg
 
     # -- Helpers -----------------------------------------------------
 
@@ -181,20 +168,40 @@ class BrainNodeTask2(Node):
     def _parse_speech_json(self, raw: str):
         """
         Parse JSON from speech result.
-        Expected: {"payload": "banana", "destination": "bowl"}
-        Returns: (payload, destination) or (None, None) on failure.
+        Expected: {"source": "bottle"}
+        Returns: source item or None on failure.
         """
         try:
             data = json.loads(raw)
-            payload = data.get('payload', '').strip().lower()
-            destination = data.get('destination', '').strip().lower()
-            if payload and destination:
-                return payload, destination
-            self.get_logger().warn(f'Missing fields in JSON: {data}')
-            return None, None
+            # Use 'source', 'payload', or 'target' based on what speech node outputs
+            # Assuming 'source' based on task_3_SYSTEM_FLOW.md
+            item = data.get('source', data.get('payload', data.get('target', ''))).strip().lower()
+            if item:
+                return item
+            self.get_logger().warn(f'Missing item field in JSON: {data}')
+            return None
         except (json.JSONDecodeError, AttributeError) as e:
-            self.get_logger().warn(f'Failed to parse speech JSON: {e} -- raw: "{raw}"')
-            return None, None
+            # Fallback if the speech node just sends the string
+            res = raw.strip().lower()
+            if res and res != 'error':
+                 return res
+            self.get_logger().warn(f'Failed to parse speech result: {e} -- raw: "{raw}"')
+            return None
+
+    # Grasp type configuration
+    def _set_grasp_type(self, grasp_type: str):
+        """Asynchronously set grasp_type param on simple_grasp_planner ('top' or 'side')."""
+        self.get_logger().info(f"Setting grasp_type to '{grasp_type}' on simple_grasp_planner...")
+        # future = self.grasp_param_client.set_parameters([
+        #     Parameter('grasp_type', Parameter.Type.STRING, grasp_type)
+        # ])
+        # future.add_done_callback(
+        #     lambda f: self.get_logger().info(
+        #         f"grasp_type set to '{grasp_type}' OK"
+        #     ) if not f.exception() else self.get_logger().error(
+        #         f"Failed to set grasp_type: {f.exception()}"
+        #     )
+        # )
 
     # Point cloud load/unload
     def start_point_cloud_processing(self):
@@ -280,56 +287,37 @@ class BrainNodeTask2(Node):
             # Simulation confirmed running and start command received
             self.get_logger().info(f'[OK] MuJoCo running. Executing command "{self.start_command}"...')
             self._set_camera_pan_tilt(0.0, 0.0)
-            
-            if self.start_command.startswith('bypass '):
-                parts = self.start_command.split(' ', 2)
-                if len(parts) >= 3:
-                    self.payload = parts[1].strip()
-                    self.destination = parts[2].strip()
-                    self.nav_retries = 0
-                    self.get_logger().info(f'Bypass active. Payload: "{self.payload}", Destination: "{self.destination}"')
-                    self._transition(BrainState.NAV_TO_PAYLOAD)
-                else:
-                    self.get_logger().error(f'Invalid bypass command format. Expected "bypass <payload> <destination>". Got: "{self.start_command}"')
-                    self.start_command = None
-            else:
-                self._transition(BrainState.WAITING_FOR_COMMAND)
+            self._transition(BrainState.WAITING_FOR_COMMAND)
 
-        # --- A: tell speech_node to listen (sequential) -------------
+        # --- A: tell speech_node to listen --------------------------
         elif self.state == BrainState.WAITING_FOR_COMMAND:
             if not self.goal_sent:
-                self.get_logger().info('--- A: WAITING FOR VERBAL COMMAND (Sequential) ---')
-                if self.start_command.startswith('test_audio_sequential '):
+                self.get_logger().info('--- A: WAITING FOR VERBAL COMMAND ---')
+                if self.start_command.startswith('test_audio'):
                     self._pub(self.speech_goal_pub, self.start_command)
                     self.get_logger().info(f'  -> speech_node: "{self.start_command}"')
-                elif self.start_command.startswith('test_audio '):
-                    # Upgrade test_audio to test_audio_sequential for Task 2
-                    cmd = self.start_command.replace('test_audio ', 'test_audio_sequential ')
-                    self._pub(self.speech_goal_pub, cmd)
-                    self.get_logger().info(f'  -> speech_node: "{cmd}"')
                 else:
-                    self._pub(self.speech_goal_pub, 'listen_sequential')
-                    self.get_logger().info('  -> speech_node: "listen_sequential"')
+                    self._pub(self.speech_goal_pub, 'listen')
+                    self.get_logger().info('  -> speech_node: "listen"')
 
                 self.goal_sent = True
                 self._transition(BrainState.LISTENING)
 
-        # ─── A (cont): wait for JSON result ────────────────────────
+        # ─── A (cont): wait for result ─────────────────────────────
         elif self.state == BrainState.LISTENING:
             if self.speech_result is not None:
                 res = self.speech_result.strip().upper()
 
                 if res != 'ERROR':
-                    payload, destination = self._parse_speech_json(self.speech_result)
+                    target = self._parse_speech_json(self.speech_result)
 
-                    if payload and destination:
-                        self.payload = payload
-                        self.destination = destination
-                        self.get_logger().info(f'[OK] Payload: "{self.payload}", Destination: "{self.destination}"')
+                    if target:
+                        self.target_item = target
+                        self.get_logger().info(f'[OK] Target: "{self.target_item}"')
                         self.nav_retries = 0
-                        self._transition(BrainState.NAV_TO_PAYLOAD)
+                        self._transition(BrainState.NAV_TO_BOTTLE)
                     else:
-                        # JSON parse failed — retry
+                        # Parse failed — retry
                         self.get_logger().warn('Invalid speech result -- Retrying in 5s ...')
                         time.sleep(5.0)
                         self._transition(BrainState.WAITING_FOR_COMMAND)
@@ -343,110 +331,98 @@ class BrainNodeTask2(Node):
                 self.get_logger().warn('Speech timeout -- Retrying ...')
                 self._transition(BrainState.WAITING_FOR_COMMAND)
 
-        # --- B: Navigate to Payload ---------------------------------
-        elif self.state == BrainState.NAV_TO_PAYLOAD:
+        # --- B: Navigate to Bottle ----------------------------------
+        elif self.state == BrainState.NAV_TO_BOTTLE:
             if not self.goal_sent:
-                self.get_logger().info(f'--- B: NAVIGATE TO PAYLOAD "{self.payload}" ---')
-                self._pub(self.nav_goal_pub, f'{self.payload}')
+                self.get_logger().info(f'--- B: NAVIGATE TO "{self.target_item}" ---')
+                self._pub(self.nav_goal_pub, f'{self.target_item}')
                 self.goal_sent = True
 
             if self.nav_status == 'arrived':
-                self.get_logger().info('  Navigation to payload complete. Starting observation...')
-                self._transition(BrainState.OBSERVING)
+                self.get_logger().info('  Navigation complete. Settling 1s...')
+                time.sleep(1.0)
+                self._transition(BrainState.SEGMENT_BODY)
             elif self.nav_status == 'failed':
                 self.nav_retries += 1
                 if self.nav_retries < self.max_nav_retries:
-                    self.get_logger().warn(f'  Nav to payload failed (attempt {self.nav_retries}/{self.max_nav_retries}). Retrying...')
-                    self._transition(BrainState.NAV_TO_PAYLOAD)
+                    self.get_logger().warn(f'  Nav to bottle failed (attempt {self.nav_retries}/{self.max_nav_retries}). Retrying...')
+                    self._transition(BrainState.NAV_TO_BOTTLE)
                 else:
-                    self.get_logger().error('  Navigation to payload failed after max retries!')
+                    self.get_logger().error('  Navigation to bottle failed after max retries!')
                     self._transition(BrainState.COMPLETED)
 
-        # --- B.5: Observe (Point Cloud processing) -----------------
-        elif self.state == BrainState.OBSERVING:
+        # --- C: Segment Body (Left Arm) -----------------------------
+        elif self.state == BrainState.SEGMENT_BODY:
             if not self.goal_sent:
-                self.get_logger().info(f'--- B.5: OBSERVING PAYLOAD "{self.payload}" ---')
-                self.latest_grasp_pose = None
+                self.get_logger().info('--- C: TRIGGER SEGMENTATION FOR BODY (LEFT ARM) ---')
+                self._set_grasp_type('side')
                 self.start_point_cloud_processing()
+                arm_msg = Int32()
+                arm_msg.data = 0  # 0 = left arm
+                self.arm_status_pub.publish(arm_msg)
+                
+                task_msg = Int32()
+                task_msg.data = 1  # Task 3
+                self.task_status_pub.publish(task_msg)
+                
                 self.goal_sent = True
 
-            if self.latest_grasp_pose is not None and elapsed > 5.0:
-                self.get_logger().info('  Grasp pose received! Stopping vision...')
-                self.stop_point_cloud_processing()
-                self._transition(BrainState.GRABBING)
-            elif elapsed > 10.0:
-                self.get_logger().warn('  Observation timeout (10s) -- no grasp found. Stopping vision.')
-                self.stop_point_cloud_processing()
-                self._transition(BrainState.COMPLETED)
+            # Wait a little for vision node to process and publish bbox to manip node
+            if elapsed > 10.0:
+                self._transition(BrainState.GRAB_BODY)
 
-        # --- C: Grab -----------------------------------------------
-        elif self.state == BrainState.GRABBING:
+        # --- D: Grab Body (Left Arm) --------------------------------
+        elif self.state == BrainState.GRAB_BODY:
             if not self.goal_sent:
-                self.get_logger().info('--- C: GRAB PAYLOAD ---')
+                self.get_logger().info('--- D: GRAB BODY (LEFT ARM) ---')
                 self._pub(self.manip_goal_pub, 'grab')
                 self.goal_sent = True
 
             if self.manip_status == 'done':
-                self.get_logger().info('  Grab complete. Settling 1s...')
+                self.get_logger().info('  Grab body complete. Stopping vision. Settling 1s...')
+                self.stop_point_cloud_processing()
                 time.sleep(1.0)
-                self.nav_retries = 0
-                self._transition(BrainState.NAV_TO_BIN)
+                self._transition(BrainState.SEGMENT_LID)
             elif self.manip_status == 'failed':
-                self.get_logger().error('  Grab failed!')
+                self.get_logger().error('  Grab body failed!')
+                self.stop_point_cloud_processing()
                 self._transition(BrainState.COMPLETED)
 
-        # --- D: Navigate to Bin/Destination -------------------------
-        elif self.state == BrainState.NAV_TO_BIN:
+        # --- E: Segment Lid (Right Arm) -----------------------------
+        elif self.state == BrainState.SEGMENT_LID:
             if not self.goal_sent:
-                # The 'destination' string (e.g. 'bowl') is sent to the navigator.
-                # The navigator then tells the vision node to find that specific object.
-                # Since 'bowl' is a standard YOLO class, it will be detected and approached automatically.
-                self.get_logger().info(f'--- D: LOCATING & NAVIGATING TO DESTINATION "{self.destination}" ---')
-                self._pub(self.nav_goal_pub, f'{self.destination}')
+                self.get_logger().info('--- E: TRIGGER SEGMENTATION FOR LID (RIGHT ARM) ---')
+                self._set_grasp_type('top')
+                self.start_point_cloud_processing()
+                arm_msg = Int32()
+                arm_msg.data = 1  # 1 = right arm
+                self.arm_status_pub.publish(arm_msg)
+                
+                task_msg = Int32()
+                task_msg.data = 1  # Task 3
+                self.task_status_pub.publish(task_msg)
+                
                 self.goal_sent = True
 
-            if self.nav_status == 'arrived':
-                self.get_logger().info('  Navigation to destination complete. Settling 1.5s...')
-                time.sleep(1.5)   
-                self._transition(BrainState.DEPOSITING)
-            elif self.nav_status == 'failed':
-                self.nav_retries += 1
-                if self.nav_retries < self.max_nav_retries:
-                    self.get_logger().warn(f'  Nav to destination failed (attempt {self.nav_retries}/{self.max_nav_retries}). Retrying...')
-                    self._transition(BrainState.NAV_TO_BIN)
-                else:
-                    self.get_logger().error('  Navigation to destination failed after max retries!')
-                    # Release object and go home anyway
-                    self._transition(BrainState.DEPOSITING)
+            # Wait a little for vision node to process and publish bbox to manip node
+            if elapsed > 10.0:
+                self._transition(BrainState.GRAB_LID_UNTWIST_POUR)
 
-        # --- E: Deposit Object --------------------------------------
-        elif self.state == BrainState.DEPOSITING:
+        # --- F: Grab Lid, Untwist, and Pour (Right Arm) -------------
+        elif self.state == BrainState.GRAB_LID_UNTWIST_POUR:
             if not self.goal_sent:
-                self.get_logger().info('--- E: DEPOSIT PAYLOAD ---')
-                self._pub(self.manip_goal_pub, 'deposit')
+                self.get_logger().info('--- F: GRAB LID AND POUR (RIGHT ARM) ---')
+                self._pub(self.manip_goal_pub, 'grab')
                 self.goal_sent = True
 
             if self.manip_status == 'done':
-                self.get_logger().info('  Deposit complete. Settling 1s...')
-                time.sleep(1.0)
-                self._transition(BrainState.RETURNING)
-            elif self.manip_status == 'failed':
-                self.get_logger().warn('  Deposit failed -- returning anyway.')
-                self._transition(BrainState.RETURNING)
-
-        # --- F: Return to Start ------------------------------------
-        elif self.state == BrainState.RETURNING:
-            if not self.goal_sent:
-                self.get_logger().info('--- F: RETURN TO START ---')
-                self._pub(self.nav_goal_pub, 'return_to_start')
-                self.goal_sent = True
-
-            if self.nav_status == 'arrived':
-                self.get_logger().info('  Back at start. Settling 1s...')
+                self.get_logger().info('  Pouring sequence complete. Stopping vision. Settling 1s...')
+                self.stop_point_cloud_processing()
                 time.sleep(1.0)
                 self._transition(BrainState.COMPLETED)
-            elif self.nav_status == 'failed':
-                self.get_logger().warn('  Return failed -- completing anyway.')
+            elif self.manip_status == 'failed':
+                self.get_logger().error('  Pouring sequence failed!')
+                self.stop_point_cloud_processing()
                 self._transition(BrainState.COMPLETED)
 
         # --- COMPLETED ---------------------------------------------
@@ -454,15 +430,15 @@ class BrainNodeTask2(Node):
             if not self.goal_sent:
                 self.get_logger().info('')
                 self.get_logger().info('=' * 55)
-                self.get_logger().info(f'  TASK 2 COMPLETE -- "{self.payload}" deposited in "{self.destination}"')
+                self.get_logger().info(f'  TASK 3 COMPLETE')
                 self.get_logger().info('=' * 55)
                 self.goal_sent = True
 
+                # Auto reset after delay
                 self.get_logger().info('Resetting in 5 seconds ...')
 
             if elapsed > 5.0:
-                self.payload = None
-                self.destination = None
+                self.target_item = None
                 self.start_command = None
                 self.nav_retries = 0
                 self._transition(BrainState.IDLE)
@@ -470,7 +446,7 @@ class BrainNodeTask2(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = BrainNodeTask2()
+    node = BrainNodeTask3()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

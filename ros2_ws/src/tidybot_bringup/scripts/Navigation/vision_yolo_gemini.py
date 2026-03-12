@@ -15,6 +15,10 @@ Publishes:
 Subscribes:
   /camera/color/image_raw  (sensor_msgs/Image)  — RGB from camera
   /vision/target           (std_msgs/String)    — What to find (e.g., "red cup", "toy")
+
+
+ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
+
 """
 
 import rclpy
@@ -46,7 +50,6 @@ from navigator import (
 
 
 
-# ros2 topic pub --once /vision/target std_msgs/msg/String "{data: 'banana'}"
 
 
 # YOLO model 
@@ -102,7 +105,7 @@ class VisionYoloGemini(Node):
         self.gemini_client = None
         self.gemini_available = False
         self.gemini_use_vertex = False
-        self._load_gemini()
+        # DISABLED: self._load_gemini()
 
         # ── Publishers ──
         self.detection_pub = self.create_publisher(
@@ -125,7 +128,7 @@ class VisionYoloGemini(Node):
             self.image_cb, 5)
         self.create_subscription(
             String, '/vision/target',
-            self.target_cb, 10)
+            self.target_cb, 1)
 
 
 

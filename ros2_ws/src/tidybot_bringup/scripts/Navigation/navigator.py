@@ -60,8 +60,8 @@ SCAN_FULL_ROTATION = 2 * math.pi / SCAN_ANGULAR_VEL  # seconds for 360°
 MAX_APPROACH_LINEAR_VEL     = 0.1  # m/s max forward speed
 CENTERING_SLOWDOWN_ZONE = 45   # pixels - Wait to align if error_x > this threshold
 CENTERING_DEADZONE      = 25   # pixels - Stop turning if |error_x| < this (prevents jitter)
-CENTERING_MIN_OMEGA     = 0.1 # rad/s - Physical limit for turning in place
-CENTERING_HOLD_TIME     = 2.0  # seconds - Stable centering before advancing
+CENTERING_MIN_OMEGA     = 0.15 # rad/s - Physical limit for turning in place
+CENTERING_HOLD_TIME     = 1.0  # seconds - Stable centering before advancing
 TARGET_Y_OFFSET         = 50   # pixels - Distance from bottom of frame to stop
 
 # Overshoot recovery — if object is lost during approach, briefly counter-rotate
@@ -71,10 +71,10 @@ OVERSHOOT_RECOVER_DUR   = 1.5   # seconds
 
 # --- Fine Centering ---
 FINE_CENTERING_DEADZONE = 45  # pixels - Tighter deadzone for final alignment
-FINE_CENTERING_HOLD     = 2.0 # seconds - Must stay within deadzone before advancing
+FINE_CENTERING_HOLD     = .5 # seconds - Must stay within deadzone before advancing
 
 # --- Final Approach ---
-FINAL_APPROACH_DIST = 0.35 # metres to drive blind after camera reset
+FINAL_APPROACH_DIST = 0.50 # metres to drive blind after camera reset
 FINAL_APPROACH_VEL  = 0.1 # m/s (slow final approach)
 
 # --- State Machine States ---
@@ -125,6 +125,7 @@ class Navigator(Node):
         self.start_x = 0.0
         self.start_y = 0.0
         self.start_theta = 0.0
+        self.home_saved = False
 
         # ── Fine-centering state ──
         self._fine_center_start = None  # time when we first became centred
@@ -149,6 +150,7 @@ class Navigator(Node):
         # ── Final-approach (odom) state ──
         self._final_start_x = None
         self._final_start_y = None
+        self.return_phase = 0
 
         # ══════════ Publishers ══════════
         self.cmd_vel_pub    = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -215,19 +217,13 @@ class Navigator(Node):
 
         elif cmd_upper == "RETURN_TO_START":
             self.state = STATE_RETURNING
-            self.goal_reached_flag = False
-            self.publish_status('navigating')
+            self.return_phase = 0
+            self.publish_status('navigating (returning)')
             
             # Reset camera for return
             self._pub_pan_tilt(0.0, 0.0)
             
-            # Use the robust position controller from the base node 
-            target = Pose2D()
-            target.x = self.start_x
-            target.y = self.start_y
-            target.theta = self.start_theta
-            self.target_pose_pub.publish(target)
-            self.get_logger().info('Sent target_pose (0.0, 0.0, 0.0) for return')
+            self.get_logger().info('Switching to manual RETURNING state...')
 
         else:
             # We treat any other string as an item name to find
@@ -247,11 +243,6 @@ class Navigator(Node):
             self.scan_accumulated_theta = 0.0
             self.last_scan_theta = self.odom_theta
             
-            # Save home pose for odom-based return fallback
-            self.start_x = self.odom_x
-            self.start_y = self.odom_y
-            self.start_theta = self.odom_theta
-            self.get_logger().info(f'Saved start pose for odom return fallback: x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
             self.publish_status('navigating')
 
     def odom_cb(self, msg: Odometry):
@@ -269,6 +260,13 @@ class Navigator(Node):
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         self.odom_theta = math.atan2(siny_cosp, cosy_cosp)
+        
+        if not self.home_saved:
+            self.start_x = self.odom_x
+            self.start_y = self.odom_y
+            self.start_theta = self.odom_theta
+            self.home_saved = True
+            self.get_logger().info(f'Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
 
     def goal_reached_cb(self, msg: Bool):
         if msg.data:
@@ -294,6 +292,13 @@ class Navigator(Node):
             
                 # The base_th published to /odom receives a +pi/2 offset inside mujoco_bridge_node.py.
                 self.odom_theta = self._wrap(positions[idx_th] + math.pi/2)
+                
+                if not self.home_saved:
+                    self.start_x = self.odom_x
+                    self.start_y = self.odom_y
+                    self.start_theta = self.odom_theta
+                    self.home_saved = True
+                    self.get_logger().info(f'Home saved at x={self.start_x:.2f}, y={self.start_y:.2f}, theta={math.degrees(self.start_theta):.1f}°')
         except (ValueError, IndexError):
             pass
 
@@ -437,7 +442,7 @@ class Navigator(Node):
                 # Check if we've been centered long enough
                 elapsed = time.time() - self._align_center_start_time
                 if elapsed >= CENTERING_HOLD_TIME:
-                    pause_duration = 5.0
+                    pause_duration = 1.0
                     self.get_logger().info(
                         f'APPROACH ph0: stable alignment for {elapsed:.1f}s — '
                         f'pausing {pause_duration} s before ADVANCE')
@@ -484,7 +489,7 @@ class Navigator(Node):
             
             # Object reached bottom of frame
             if pixel_y > IMAGE_HEIGHT - TARGET_Y_OFFSET:
-                pause_duration = 5.0
+                pause_duration = 1.0
                 self.get_logger().info(
                     f'APPROACH ph1: object bottom at frame bottom (y={pixel_y:.0f}) — '
                     f'pausing {pause_duration} s before FINE_CENTERING')
@@ -562,7 +567,7 @@ class Navigator(Node):
                 self._fine_center_start = time.time()
                 self.get_logger().info('Fine-centering: within deadzone, starting hold timer...')
             elif time.time() - self._fine_center_start >=FINE_CENTERING_HOLD:
-                pause_duration = 5.0
+                pause_duration = 1.0
                 self.get_logger().info(f'Fine-centering done — pausing {pause_duration} s before CAMERA_RESET')
                 self._fine_center_start = None
                 self.publish_status('camera_reset')
@@ -623,7 +628,7 @@ class Navigator(Node):
 
         if self._cam_reset_phase == 0:
             # Send tilt down
-            self._pub_pan_tilt(0.0, -0.6)
+            # self._pub_pan_tilt(0.0, -0.6)
             self.get_logger().info('Camera: tilting up (-0.6)')
             self._cam_reset_phase = 1
             self._cam_reset_phase_t = now
@@ -679,17 +684,55 @@ class Navigator(Node):
     # ═══════════════════════════════════════════════════════════
 
     def do_return(self):
-        # We rely on the /base/target_pose command sent in command_cb.
-        # mujoco_bridge_node.py (and phoenix6_base_node) handles the continuous control internally
-        # and publishes True to /base/goal_reached when it finishes.
+        # 3-phase manual return to start using odometry
+        # Phase 0: Rotate to face (start_x, start_y)
+        # Phase 1: Drive forward to (start_x, start_y)
+        # Phase 2: Rotate to start_theta
+
+        dx = self.start_x - self.odom_x
+        dy = self.start_y - self.odom_y
+        distance = math.sqrt(dx**2 + dy**2)
+
+        angle_to_start = math.atan2(dy, dx)
+        heading_error = self._wrap(angle_to_start - self.odom_theta)
         
-        # NOTE: Any calls to self.send_vel() here would CANCEL the base node's target_pose! 
-        # So we just passively wait for the goal_reached flag.
-        
-        if self.goal_reached_flag:
-            self.state = STATE_IDLE
-            self.publish_status('arrived')
-            self.get_logger().info('ARRIVED HOME (Target Pose Reached)')
+        if self.return_phase == 0:
+            if distance < 0.2:
+                # Already close enough, skip to phase 2
+                self.return_phase = 2
+                return
+                
+            if abs(heading_error) < 0.1:
+                self.return_phase = 1
+                self.send_vel(0.0, 0.0)
+                self.get_logger().info('Return Phase 0 complete: Facing start.')
+            else:
+                omega = math.copysign(0.3, heading_error)
+                self.send_vel(0.0, omega)
+                
+        elif self.return_phase == 1:
+            if distance < 0.2:
+                self.return_phase = 2
+                self.send_vel(0.0, 0.0)
+                self.get_logger().info('Return Phase 1 complete: Reached start XY.')
+            else:
+                # If we drifted too far in heading, stop driving and rotate to correct
+                if abs(heading_error) > 0.15:
+                    omega = math.copysign(0.3, heading_error)
+                    self.send_vel(0.0, omega)
+                else:
+                    self.send_vel(0.2, 0.0)
+
+        elif self.return_phase == 2:
+            final_heading_error = self._wrap(self.start_theta - self.odom_theta)
+            if abs(final_heading_error) < 0.1:
+                self.send_vel(0.0, 0.0)
+                self.state = STATE_IDLE
+                self.publish_status('arrived')
+                self.get_logger().info('ARRIVED HOME (Manual Odometry)')
+            else:
+                omega = math.copysign(0.3, final_heading_error)
+                self.send_vel(0.0, omega)
 
     # ═══════════════════════════════════════════════════════════
     #  HELPERS
