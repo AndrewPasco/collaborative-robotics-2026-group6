@@ -10,6 +10,7 @@ States:
   WAITING_FOR_COMMAND → Sending 'listen'
   LISTENING           → Waiting for speech result
   NAVIGATING          → Waiting for navigation
+  OBSERVING           → Starting vision, waiting for grasp pose, stopping vision
   GRABBING            → Waiting for manipulation
   RETURNING           → Waiting for navigation
   RELEASING           → Waiting for manipulation
@@ -25,6 +26,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Int32, Float64MultiArray
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import PoseStamped
+from composition_interfaces.srv import LoadNode, UnloadNode
 
 
 # ── States ──────────────────────────────────────────────────────────
@@ -34,6 +37,7 @@ class BrainState(Enum):
     WAITING_FOR_COMMAND = auto()   # A — tell speech_node to listen
     LISTENING           = auto()   # A — waiting for speech_node result
     NAVIGATING          = auto()   # B — waiting for navigation_node
+    OBSERVING           = auto()   # B.5 — Vision processing
     GRABBING            = auto()   # C — waiting for manipulation_node
     RETURNING           = auto()   # D — waiting for navigation_node
     RELEASING           = auto()   # E — waiting for manipulation_node
@@ -59,10 +63,12 @@ class BrainNode(Node):
         self.speech_result = None
         self.nav_status    = 'idle'
         self.manip_status  = 'idle'
+        self.latest_grasp_pose = None
 
         self.create_subscription(String, '/brain/speech_result',        self._speech_cb, 10)
         self.create_subscription(String, '/brain/navigation_status',    self._nav_cb,    10)
         self.create_subscription(String, '/brain/manipulation_status',  self._manip_cb,  10)
+        self.create_subscription(PoseStamped, '/detected_grasps/pose', self._grasp_cb, 10)
         
         # Check if MuJoCo is running
         self.mujoco_ready = False
@@ -77,6 +83,13 @@ class BrainNode(Node):
         self.target_item: str | None = None
         self.goal_sent = False
         self.state_start_time = time.time()
+
+        # Service clients to dynamically load/unload vision processing
+        self.load_client = self.create_client(LoadNode, '/vision_container/_container/load_node')
+        self.unload_client = self.create_client(UnloadNode, '/vision_container/_container/unload_node')
+        
+        # This will store the ID of the point_cloud_xyz node once it's running
+        self.pc_node_id = None
 
         # -- Startup delay then control loop -------------------------
         self.get_logger().info('  Waiting 5s for other nodes to start ...')
@@ -108,9 +121,6 @@ class BrainNode(Node):
         self.state_start_time = time.time()
         self.control_timer = self.create_timer(1.0, self._control_loop)
 
-
-
-
     # -- Callbacks ---------------------------------------------------
 
     def _command_cb(self, msg: String):
@@ -129,13 +139,16 @@ class BrainNode(Node):
     def _joint_state_cb(self, msg: JointState):
         self.mujoco_ready = True
 
+    def _grasp_cb(self, msg: PoseStamped):
+        if self.state == BrainState.OBSERVING:
+            self.latest_grasp_pose = msg
+
     # -- Helpers -----------------------------------------------------
 
     def _transition(self, new_state: BrainState):
         self.get_logger().info(f'State: {self.state.name}  ->  {new_state.name}')
         self.state = new_state
         self.goal_sent = False
-        self.state_start_time = time.time()
         self.state_start_time = time.time()
         self.speech_result = None
         self.nav_status = 'idle'
@@ -151,6 +164,70 @@ class BrainNode(Node):
         msg.data = [float(pan), float(tilt)]
         self.pt_cmd_pub.publish(msg)
         self.get_logger().info(f'Setting camera pan-tilt: {pan}, {tilt}')
+
+    # Point cloud load/unload
+    def start_point_cloud_processing(self):
+        if self.pc_node_id is not None:
+            self.get_logger().info("Point cloud processing is already running.")
+            return
+
+        if not self.load_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error("Vision container load service not available! Is the container running?")
+            return
+
+        req = LoadNode.Request()
+        req.package_name = 'depth_image_proc'
+        req.plugin_name = 'depth_image_proc::PointCloudXyzNode'
+        req.node_name = 'point_cloud_xyz'
+        req.node_namespace = ''
+        
+        req.remap_rules = [
+            'image_rect:=/camera/depth/image_raw',
+            'camera_info:=/camera/depth/camera_info',
+            'points:=/camera/points'
+        ]
+
+        self.get_logger().info("Starting point cloud generation...")
+        future = self.load_client.call_async(req)
+        future.add_done_callback(self._load_done_callback)
+
+    def _load_done_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.pc_node_id = response.unique_id
+                self.get_logger().info(f"Loaded point_cloud_xyz (ID: {self.pc_node_id}). CPU will spike now.")
+            else:
+                self.get_logger().error(f"Failed to load vision node: {response.error_message}")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
+
+    def stop_point_cloud_processing(self):
+        if self.pc_node_id is None:
+            self.get_logger().warn("Cannot stop: point cloud processing isn't running.")
+            return
+
+        if not self.unload_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error("Vision container unload service not available!")
+            return
+
+        req = UnloadNode.Request()
+        req.unique_id = self.pc_node_id
+
+        self.get_logger().info("Stopping point cloud generation...")
+        future = self.unload_client.call_async(req)
+        future.add_done_callback(self._unload_done_callback)
+
+    def _unload_done_callback(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.get_logger().info(f"Successfully killed point_cloud_xyz (ID: {self.pc_node_id}). CPU drops to 0%.")
+                self.pc_node_id = None
+            else:
+                self.get_logger().error(f"Failed to unload vision node: {response.error_message}")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
 
     # ── Control loop ────────────────────────────────────────────────
 
@@ -223,9 +300,26 @@ class BrainNode(Node):
                 self.get_logger().error('  Navigation failed!')
                 self._transition(BrainState.COMPLETED)
 
+        # --- B.5: Observe (Point Cloud processing) -----------------
+        elif self.state == BrainState.OBSERVING:
+            if not self.goal_sent:
+                self.get_logger().info('--- B.5: OBSERVING ITEM ---')
+                self.latest_grasp_pose = None
+                self.start_point_cloud_processing()
+                self.goal_sent = True
+
+            if self.latest_grasp_pose is not None:
+                self.get_logger().info('  Grasp pose received! Stopping vision...')
+                self.stop_point_cloud_processing()
+                self._transition(BrainState.GRABBING)
+            elif elapsed > 5.0:
+                self.get_logger().warn('  Observation timeout (5s) -- no grasp found. Stopping vision.')
+                self.stop_point_cloud_processing()
+                self._transition(BrainState.COMPLETED) # Or trigger recovery logic
+
         # --- C: Grab -----------------------------------------------
         elif self.state == BrainState.GRABBING:
-            if not self.goal_sent:
+            if not self.goal_sent:               
                 self.get_logger().info('--- C: GRAB OBJECT ---')
                 self._pub(self.manip_goal_pub, 'grab')
                 self.goal_sent = True
@@ -293,7 +387,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

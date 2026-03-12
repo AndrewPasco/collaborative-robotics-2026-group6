@@ -36,6 +36,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 
 
 def generate_launch_description():
@@ -105,6 +107,18 @@ def generate_launch_description():
         # parameters=[{'use_sim_time': True}]
     )
 
+    pc_container = ComposableNodeContainer(
+        name='vision_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',
+        composable_node_descriptions=[
+            # We intentionally leave this empty! 
+            # The brain node will dynamically load point_cloud_xyz here.
+        ],
+        output='screen',
+    )
+
     vision = Node(
         package='tidybot_bringup',
         executable='vision_yolo_gemini.py',
@@ -155,6 +169,7 @@ def generate_launch_description():
         navigation,
         vision,
         manipulation,
+        pc_container,
         right_arm_controller,
         left_arm_controller,
         brain,

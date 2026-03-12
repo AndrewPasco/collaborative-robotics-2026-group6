@@ -34,6 +34,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 
 
 def generate_launch_description():
@@ -114,10 +116,22 @@ def generate_launch_description():
         output='screen',
     )
 
-    point_cloud = Node(
-        package='tidybot_bringup',
-        executable='point_cloud_node.py',
-        name='point_cloud_node',
+    # point_cloud = Node(
+    #     package='tidybot_bringup',
+    #     executable='point_cloud_node.py',
+    #     name='point_cloud_node',
+    #     output='screen',
+    # )
+
+    pc_container = ComposableNodeContainer(
+        name='vision_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container',
+        composable_node_descriptions=[
+            # We intentionally leave this empty! 
+            # The brain node will dynamically load point_cloud_xyz here.
+        ],
         output='screen',
     )
 
@@ -154,7 +168,8 @@ def generate_launch_description():
         speech,
         navigation,
         vision,
-        point_cloud,
+        # point_cloud,
+        pc_container,
         manipulation,
         right_arm_controller,
         left_arm_controller,
