@@ -38,6 +38,7 @@ import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import String, Float64MultiArray, Int32
+from sensor_msgs.msg import RegionOfInterest
 from tidybot_msgs.msg import ArmCommand
 
 
@@ -65,6 +66,11 @@ class ManipulationNode(Node):
         # Metadata from brain (for real robot parity)
         self.create_subscription(Int32, '/arm_status', self._arm_status_cb, 10)
         self.create_subscription(Int32, '/task_status', self._task_status_cb, 10)
+
+        # Vision bbox from segment_task3 (Task 3 only)
+        self.latest_bbox = None
+        self.bbox_received = False
+        self.create_subscription(RegionOfInterest, '/vision/bbox', self._bbox_cb, 10)
 
         # ── Low-level publishers ────────────────────────────────────
         self.arm_pub     = self.create_publisher(ArmCommand,        '/right_arm/cmd',     10)
@@ -96,7 +102,12 @@ class ManipulationNode(Node):
         self.state_start_time = time.time()
         self._publish_status('executing')
 
-        if goal == 'grab':
+        if goal == 'grab' and self.current_task == 1:
+            # Task 3: wait for bbox from segment_task3, then grab
+            self.sub_state = 'WAITING_BBOX'
+            self.get_logger().info('  Task 3 grab: waiting for /vision/bbox ...')
+
+        elif goal == 'grab':
             self.sub_state = 'REACHING'
             self._send_gripper(0.0)              # open gripper first
             self._send_arm(ARM_PRE_GRASP)        # reach to pre-grasp
@@ -125,6 +136,11 @@ class ManipulationNode(Node):
     def _arm_status_cb(self, msg: Int32):
         """Metadata from brain: 0=left, 1=right."""
         self.active_arm = 'left' if msg.data == 0 else 'right'
+        
+        # Clear bbox when switching arms/stages in Task 3
+        self.bbox_received = False
+        self.latest_bbox = None
+        
         # Update publishers based on active arm
         self.arm_pub = self.create_publisher(ArmCommand, f'/{self.active_arm}_arm/cmd', 10)
         self.gripper_pub = self.create_publisher(Float64MultiArray, f'/{self.active_arm}_gripper/cmd', 10)
@@ -135,6 +151,15 @@ class ManipulationNode(Node):
         self.current_task = msg.data
         task_label = "Task 3" if msg.data == 1 else "Task 1 or 2"
         self.get_logger().info(f'Placeholder acknowledging task: {task_label}')
+
+    def _bbox_cb(self, msg: RegionOfInterest):
+        """Receive a bounding box from segment_task3."""
+        self.latest_bbox = msg
+        self.bbox_received = True
+        self.get_logger().info(
+            f'  [BBOX] Received bbox from segment_task3: '
+            f'x={msg.x_offset} y={msg.y_offset} w={msg.width} h={msg.height}'
+        )
 
     # ── Helpers ─────────────────────────────────────────────────────
 
@@ -160,8 +185,27 @@ class ManipulationNode(Node):
     def _control_loop(self):
         elapsed = time.time() - self.state_start_time
 
+        # ── TASK 3: wait for bbox, then grab ────────────────────────
+        if self.sub_state == 'WAITING_BBOX':
+            if self.bbox_received:
+                bbox = self.latest_bbox
+                self.get_logger().info(
+                    f'  [OK] Bbox received — x={bbox.x_offset} y={bbox.y_offset} '
+                    f'w={bbox.width} h={bbox.height}. Executing grab on {self.active_arm} arm...'
+                )
+                self._send_gripper(0.0)      # open gripper
+                self._send_arm(ARM_PRE_GRASP)
+                self.sub_state = 'REACHING'
+                self.state_start_time = time.time()
+            elif elapsed > 12.0:
+                # Log periodically but avoid spamming (the control loop runs at 50Hz)
+                if not hasattr(self, '_last_wait_log_time') or (time.time() - self._last_wait_log_time) >= 10.0:
+                    self.get_logger().info(f'  Still waiting for /vision/bbox... ({int(elapsed)}s)')
+                    self._last_wait_log_time = time.time()
+            return
+
         # ── GRAB sequence: reach → close → retract ──────────────────
-        if self.sub_state == 'REACHING':
+        elif self.sub_state == 'REACHING':
             if elapsed > ARM_MOVE_DURATION + 0.5:
                 self.get_logger().info('  Reached pre-grasp. Closing gripper …')
                 self._send_gripper(1.0)

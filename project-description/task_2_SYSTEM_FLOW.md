@@ -24,9 +24,14 @@ graph TD
     Sim -- "/joint_states" --> BrainNode
 
     BrainNode -- "/brain/manipulation_goal" --> ManipNode[Manipulation Node]
-    BrainNode -- "/arm_status (Int32)" --> ManipNode
-    BrainNode -- "/task_status (Int32)" --> ManipNode
+    BrainNode -- "/arm_status" --> ManipNode
+    BrainNode -- "/task_status" --> ManipNode
     ManipNode -- "/brain/manipulation_status" --> BrainNode
+
+    %% Dynamic Vision Processing %%
+    BrainNode -- "LoadNode / UnloadNode" --> Container[vision_container]
+    Container -- "/camera/points" --> Planner[Simple Grasp Planner]
+    Planner -- "/vision/grasp_pose" --> BrainNode
 
     BrainNode -- "/camera/pan_tilt_cmd" --> Sim
     NavNode -- "/camera/pan_tilt_cmd" --> Sim
@@ -42,6 +47,7 @@ graph TD
 | **WAITING_FOR_COMMAND** | Publish `"listen_sequential"` to `/brain/speech_goal` | - | Brain |
 | **LISTENING** | - | JSON result on `/brain/speech_result` | Speech Node |
 | **NAV_TO_PAYLOAD** | Publish `<payload>` to `/brain/navigation_goal` | `"arrived"` on `/brain/navigation_status` | Navigator Node |
+| **OBSERVING** | Load `PointCloudXyzNode` via Composition | Grasp pose on `/vision/grasp_pose` | Simple Grasp Planner |
 | **GRABBING** | Publish `"grab"` to `/brain/manipulation_goal` | `"done"` on `/brain/manipulation_status` | Manipulation Node |
 | **NAV_TO_BIN** | Publish `<destination>` to `/brain/navigation_goal` | `"arrived"` on `/brain/navigation_status` | Navigator Node |
 | **DEPOSITING** | Publish `"deposit"` to `/brain/manipulation_goal` | `"done"` on `/brain/manipulation_status` | Manipulation Node |
@@ -55,10 +61,18 @@ graph TD
 ### 1. Speech Pipeline (Sequential)
 - **Brain publishes**: `/brain/speech_goal` (String: `"listen_sequential"`)
 - **Brain subscribes**: `/brain/speech_result` (String: JSON, e.g. `{"payload": "banana", "destination": "bowl"}`)
+- **Bypass**: Users can send `"bypass <payload> <destination>"` to `/brain/command` to skip speech recognition.
 - **Wait behavior**: Brain stays in `LISTENING` until valid JSON is received. On `"ERROR"` or malformed JSON, retries with a 5s delay. Hard timeout at 60s.
 - **Data**: `payload` and `destination` are parsed and stored as internal variables for the full duration of the task.
 
-### 2. Navigation Pipeline
+### 2. Observing Step (Dynamic Vision)
+To conserve CPU, the Heavy Point Cloud Node is only loaded when needed:
+1. **Entry**: Brain calls `LoadNode` service to start `PointCloudXyzNode`.
+2. **Detection**: Brain waits up to **10s** for a valid `PoseStamped` on `/vision/grasp_pose`.
+3. **Exit**: Brain calls `UnloadNode` to kill the point cloud generation.
+- **Sim Bypass**: If `use_sim` is True, this state transitions immediately to **GRABBING** to avoid vision timeouts in simulation.
+
+### 3. Navigation Pipeline
 - **Brain publishes**: `/brain/navigation_goal` (String: `"<payload>"`, `"<destination>"`, or `"return_to_start"`)
 - **Brain subscribes**: `/brain/navigation_status` (String)
 - **Wait behavior**: Brain transitions only when `"arrived"` is received. On `"failed"`, retries up to **3 times** before aborting.
@@ -74,20 +88,25 @@ graph TD
 | **FINAL_APPROACH** | Odometry-based forward drive of `0.6m` at `0.1 m/s`. On completion → publishes `"arrived"`. |
 
 #### Return to Start (`"return_to_start"` goal)
-- Navigator resets camera to `[0.0, 0.0]` pan/tilt.
-- Publishes `Pose2D(0.0, 0.0, 0.0)` to `/base/target_pose`.
-- MuJoCo bridge drives home and publishes `True` on `/base/goal_reached`.
-- Navigator receives `goal_reached` → publishes `"arrived"`.
+The Navigator uses **manual odometry** control for navigation reliability:
+1. **Camera**: Navigator resets camera to `[0.0, 0.0]` pan/tilt.
+2. **Phase 0 (Aligning)**: Rotate in place to face the saved start coordinates.
+3. **Phase 1 (Driving)**: Drive forward to start XY within `0.2m` tolerance.
+4. **Phase 2 (Final Heading)**: Rotate to match original starting orientation.
+- **Legacy/Real Path**: On the real robot or legacy configurations, the Navigator resets camera, publishes `Pose2D(0.0, 0.0, 0.0)` to `/base/target_pose`, and waits for `True` on `/base/goal_reached`.
+- **Sim/Real Consistency**: Uses specific `/cmd_vel` control in simulation to ensure identical outcome across environments.
 
-### 3. Manipulation Pipeline
+### 4. Manipulation Pipeline
 - **Brain publishes**:
   - `/brain/manipulation_goal` (String: `"grab"` or `"deposit"`)
   - `/arm_status` (Int32: `1 = right arm`) — set once on startup
   - `/task_status` (Int32: `0 = task 1/2`) — set once on startup
 - **Brain subscribes**: `/brain/manipulation_status` (String: `"idle"`, `"executing"`, `"done"`, `"failed"`)
 - **Wait behavior**: Brain transitions on `"done"`. On `"failed"` during deposit, Brain still transitions to `RETURNING`.
-- **Grab sequence**: Reach (IK) → Grasp (close gripper) → Retract to stow pose.
-- **Deposit sequence**: Lift → Align with bin → Release (open gripper) → Retract.
+- **Sequences**:
+  - **Grab sequence**: Reach (IK) → Grasp (close gripper) → Retract to stow pose.
+  - **Deposit sequence**: Lift → Align with bin → Release (open gripper) → Retract.
+- **Simulation**: In simulation, `manipulation_node_placeholder.py` provides simplified success callbacks.
 
 ---
 
@@ -100,4 +119,6 @@ graph TD
 - **Speech Retry**: On `"ERROR"` or parse failure, Brain sleeps **5s** then re-enters `WAITING_FOR_COMMAND`. Hard timeout at **60s**.
 - **Navigation Retry**: Up to **3 retries** on `"failed"` for each navigation leg. After max retries on `NAV_TO_BIN`, Brain forces a `DEPOSITING` transition anyway to avoid permanently blocking.
 - **Heartbeat**: Brain waits for at least one `/joint_states` message before leaving `IDLE`.
+- **Observation Timeout**: 10s before failing task (skipped in simulation mode via `use_sim`).
+- **Home Saving**: Navigator waits **1.0s** after first pose message before locking "home" coordinates to ensure odom stability.
 - **Detection Timeout**: Navigator considers detection stale after **5s**; stale during approach → reverts to SCANNING.

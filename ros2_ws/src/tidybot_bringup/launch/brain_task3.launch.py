@@ -26,11 +26,14 @@ Start task:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'start'}"
 Test audio:
 ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'test_audio ~/collaborative-robotics-2026-group6/examples/bottle.wav'}"
+
+Skip audio:
+ros2 topic pub --once /brain/command std_msgs/msg/String "{data: 'bypass bottle'}"
 """
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, GroupAction, Shutdown
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -95,14 +98,24 @@ def generate_launch_description():
         executable='navigator.py',
         name='navigation_node',
         output='screen',
+        parameters=[{'use_sim': LaunchConfiguration('use_sim')}]
     )
 
-    manipulation = Node(
+    manipulation_placeholder = Node(
         package='tidybot_bringup',
         executable='manipulation_node_placeholder.py',
-        # executable='manipulation_node.py',
         name='manipulation_node',
         output='screen',
+        condition=IfCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
+    )
+    manipulation = Node(
+        package='tidybot_bringup',
+        executable='manipulation_node.py',
+        name='manipulation_node',
+        output='screen',
+        condition=UnlessCondition(LaunchConfiguration('use_sim')),
+        on_exit=Shutdown(),
     )
 
     vision = Node(
@@ -124,6 +137,7 @@ def generate_launch_description():
         executable='brain_node_task3.py',
         name='brain_node_task3',
         output='screen',
+        parameters=[{'use_sim': LaunchConfiguration('use_sim')}]
     )
 
     pc_container = ComposableNodeContainer(
@@ -173,6 +187,7 @@ def generate_launch_description():
         vision,
         segment,
         manipulation,
+        manipulation_placeholder,
         pc_container,
         right_arm_controller,
         left_arm_controller,

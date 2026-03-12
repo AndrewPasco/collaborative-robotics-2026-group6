@@ -74,7 +74,7 @@ FINE_CENTERING_DEADZONE = 45  # pixels - Tighter deadzone for final alignment
 FINE_CENTERING_HOLD     = .5 # seconds - Must stay within deadzone before advancing
 
 # --- Final Approach ---
-FINAL_APPROACH_DIST = 0.50 # metres to drive blind after camera reset
+FINAL_APPROACH_DIST = 0.6 # metres to drive blind after camera reset
 FINAL_APPROACH_VEL  = 0.1 # m/s (slow final approach)
 
 # --- State Machine States ---

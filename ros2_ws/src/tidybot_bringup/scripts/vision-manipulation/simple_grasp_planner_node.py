@@ -42,6 +42,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2, PointField, RegionOfInterest
 from geometry_msgs.msg import PoseStamped, Point
+from std_msgs.msg import Int32
 from tidybot_msgs.srv import PlanToTarget
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
@@ -74,7 +75,13 @@ class SimpleGraspPlannerNode(Node):
             PointCloud2, "/camera/points", self.cloud_callback, qos
         )
         self.trigger_sub = self.create_subscription(
-            RegionOfInterest, "/vision/target_bbox", self.trigger_callback, 10
+            RegionOfInterest, "/vision/target_bbox", self.trigger_callback_task12, 10
+        )
+        self.trigger_sub_task3 = self.create_subscription(
+            RegionOfInterest, "/vision/bbox", self.trigger_callback_task3, 10
+        )
+        self.task_status_sub = self.create_subscription(
+            Int32, "/task_status", self.task_status_callback, 10
         )
         self.pose_pub = self.create_publisher(PoseStamped, "/detected_grasps/pose", 10)
         self.rviz_pub = self.create_publisher(PoseStamped, "/detected_grasps/rviz_pose_new", 10)
@@ -86,7 +93,11 @@ class SimpleGraspPlannerNode(Node):
 
         self.latest_cloud = None
         self.processing = False
-        self.get_logger().info("Simple Grasp Planner Ready (Manual TF). Waiting for ROI on /vision/target_bbox")
+        self.current_task = 0  # Default to task 1/2
+        self.get_logger().info("Simple Grasp Planner Ready (Manual TF). Waiting for ROI on /vision/target_bbox or /vision/bbox")
+
+    def task_status_callback(self, msg):
+        self.current_task = msg.data
 
     def cloud_callback(self, msg):
         self.latest_cloud = msg
@@ -141,7 +152,17 @@ class SimpleGraspPlannerNode(Node):
         points_trans = np.dot(t, points_homo.T).T
         return points_trans[:, :3]
 
-    def trigger_callback(self, roi):
+    def trigger_callback_task12(self, roi):
+        if self.current_task == 1:
+            return  # Ignore YOLO bbox during task 3
+        self._process_roi(roi)
+
+    def trigger_callback_task3(self, roi):
+        if self.current_task == 0:
+            return  # Ignore segment_task3 bbox during task 1/2
+        self._process_roi(roi)
+
+    def _process_roi(self, roi):
         if self.processing or self.latest_cloud is None:
             self.get_logger().info("Not executing")
             return

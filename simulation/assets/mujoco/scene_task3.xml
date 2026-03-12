@@ -1,0 +1,43 @@
+<mujoco model="tidybot task2 sequential scene">
+  <include file="tidybot_wx250s_bimanual.xml"/>
+
+  <statistic center="0 0 0.525" extent="1.1" meansize="0.05"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="140" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+      markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+
+    <!-- Bottle photo displayed on a flat billboard -->
+    <texture name="bottle_tex" type="2d" file="/home/mete/collaborative-robotics-2026-group6/examples/bottle.png"/>
+    <material name="bottle_mat" texture="bottle_tex" texuniform="false" texrepeat="1 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Lights -->
+    <light pos="0 0 1.5" directional="true"/>
+
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- Bottle (payload) - photo displayed on a flat upright billboard -->
+    <body name="bottle" pos="1.5 1.0 0.25">
+      <freejoint name="bottle_joint"/>
+      <geom name="bottle_geom" type="box" size="0.16 0.12 0.1" material="bottle_mat"
+        mass="0.5" friction="7 7 0.5"/>
+    </body>
+  </worldbody>
+
+  <keyframe>
+    <!-- 21 robot dofs + 7 bottle dofs = 28 total -->
+    <!-- Robot: 3 base + 6 left arm + 2 left gripper + 6 right arm + 2 right gripper = 21 -->
+    <!-- Bottle freejoint: x y z qw qx qy qz = 7 -->
+    <key name="home" qpos="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037 1.5 1.0 0.25  0.653  0.653 -0.271 -0.271"/>
+  </keyframe>
+</mujoco>

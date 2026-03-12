@@ -30,8 +30,9 @@ from enum import Enum, auto
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+# from rclpy.parameter_client import AsyncParametersClient
 from std_msgs.msg import String, Int32, Float64MultiArray
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, RegionOfInterest
 from composition_interfaces.srv import LoadNode, UnloadNode
 
 
@@ -68,10 +69,12 @@ class BrainNodeTask3(Node):
         self.speech_result = None
         self.nav_status    = 'idle'
         self.manip_status  = 'idle'
+        self.bbox_received = False
 
         self.create_subscription(String, '/brain/speech_result',        self._speech_cb, 10)
         self.create_subscription(String, '/brain/navigation_status',    self._nav_cb,    10)
         self.create_subscription(String, '/brain/manipulation_status',  self._manip_cb,  10)
+        self.create_subscription(RegionOfInterest, '/vision/bbox',      self._bbox_cb,   10)
 
         # Check if MuJoCo is running
         self.mujoco_ready = False
@@ -89,13 +92,17 @@ class BrainNodeTask3(Node):
         self.nav_retries = 0
         self.max_nav_retries = 3
 
+        # ── Parameters ──
+        self.declare_parameter('use_sim', True)
+        self.use_sim = self.get_parameter('use_sim').value
+
         # Service clients to dynamically load/unload vision processing
         self.load_client = self.create_client(LoadNode, '/vision_container/_container/load_node')
         self.unload_client = self.create_client(UnloadNode, '/vision_container/_container/unload_node')
         self.pc_node_id = None
 
         # Async param client to configure the grasp planner at runtime
-        # self.grasp_param_client = rclpy.parameter.AsyncParametersClient(
+        # self.grasp_param_client = AsyncParametersClient(
         #     self, 'simple_grasp_planner'
         # )
 
@@ -142,6 +149,9 @@ class BrainNodeTask3(Node):
 
     def _joint_state_cb(self, msg: JointState):
         self.mujoco_ready = True
+        
+    def _bbox_cb(self, msg: RegionOfInterest):
+        self.bbox_received = True
 
     # -- Helpers -----------------------------------------------------
 
@@ -153,6 +163,7 @@ class BrainNodeTask3(Node):
         self.speech_result = None
         self.nav_status = 'idle'
         self.manip_status = 'idle'
+        self.bbox_received = False
 
     def _pub(self, publisher, data: str):
         msg = String()
@@ -287,7 +298,19 @@ class BrainNodeTask3(Node):
             # Simulation confirmed running and start command received
             self.get_logger().info(f'[OK] MuJoCo running. Executing command "{self.start_command}"...')
             self._set_camera_pan_tilt(0.0, 0.0)
-            self._transition(BrainState.WAITING_FOR_COMMAND)
+
+            if self.start_command.startswith('bypass '):
+                parts = self.start_command.split(' ', 1)
+                if len(parts) >= 2:
+                    self.target_item = parts[1].strip()
+                    self.nav_retries = 0
+                    self.get_logger().info(f'Bypass active. Target: "{self.target_item}"')
+                    self._transition(BrainState.NAV_TO_BOTTLE)
+                else:
+                    self.get_logger().error(f'Invalid bypass command format. Expected "bypass <item>". Got: "{self.start_command}"')
+                    self.start_command = None
+            else:
+                self._transition(BrainState.WAITING_FOR_COMMAND)
 
         # --- A: tell speech_node to listen --------------------------
         elif self.state == BrainState.WAITING_FOR_COMMAND:
@@ -356,7 +379,8 @@ class BrainNodeTask3(Node):
             if not self.goal_sent:
                 self.get_logger().info('--- C: TRIGGER SEGMENTATION FOR BODY (LEFT ARM) ---')
                 self._set_grasp_type('side')
-                self.start_point_cloud_processing()
+                if not self.use_sim:
+                    self.start_point_cloud_processing()
                 arm_msg = Int32()
                 arm_msg.data = 0  # 0 = left arm
                 self.arm_status_pub.publish(arm_msg)
@@ -367,8 +391,9 @@ class BrainNodeTask3(Node):
                 
                 self.goal_sent = True
 
-            # Wait a little for vision node to process and publish bbox to manip node
-            if elapsed > 10.0:
+            # Wait for vision node to process and publish bbox
+            if self.bbox_received:
+                self.get_logger().info('  Bbox received. Moving to GRAB_BODY.')
                 self._transition(BrainState.GRAB_BODY)
 
         # --- D: Grab Body (Left Arm) --------------------------------
@@ -393,7 +418,8 @@ class BrainNodeTask3(Node):
             if not self.goal_sent:
                 self.get_logger().info('--- E: TRIGGER SEGMENTATION FOR LID (RIGHT ARM) ---')
                 self._set_grasp_type('top')
-                self.start_point_cloud_processing()
+                if not self.use_sim:
+                    self.start_point_cloud_processing()
                 arm_msg = Int32()
                 arm_msg.data = 1  # 1 = right arm
                 self.arm_status_pub.publish(arm_msg)
@@ -404,8 +430,9 @@ class BrainNodeTask3(Node):
                 
                 self.goal_sent = True
 
-            # Wait a little for vision node to process and publish bbox to manip node
-            if elapsed > 10.0:
+            # Wait for vision node to process and publish bbox
+            if self.bbox_received:
+                self.get_logger().info('  Bbox received. Moving to GRAB_LID_UNTWIST_POUR.')
                 self._transition(BrainState.GRAB_LID_UNTWIST_POUR)
 
         # --- F: Grab Lid, Untwist, and Pour (Right Arm) -------------
